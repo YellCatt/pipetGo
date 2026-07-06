@@ -1,0 +1,12 @@
+target:
+  base_url: "https://api.example.com"
+  timeout: 30
+
+log:
+  level: "info"
+  encoding: "json"
+  output: "stdout"
+
+test:
+  report_dir: "./reports"
+  test_case_dir: "./testcases"
