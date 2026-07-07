@@ -93,7 +93,7 @@ func expandPath(path string) ([]string, error) {
 	}
 
 	if info.IsDir() {
-		matches, err := doublestar.Glob(os.DirFS(path), "*.psv")
+		matches, err := doublestar.Glob(os.DirFS(path), "**/*.{psv,csv}")
 		if err != nil {
 			return nil, err
 		}
