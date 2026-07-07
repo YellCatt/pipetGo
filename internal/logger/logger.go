@@ -50,8 +50,12 @@ func InitLogger(cfg LogConfig) {
 	}
 	zapConfig.OutputPaths = outputPaths
 
-	// 设置东八区时间格式
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	// 设置时间格式（东八区）
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		// 如果无法加载时区，使用UTC作为备用
+		loc = time.UTC
+	}
 	zapConfig.EncoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 		enc.AppendString(t.In(loc).Format("2006-01-02 15:04:05.000"))
 	}
