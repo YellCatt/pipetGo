@@ -14,19 +14,27 @@ jobs:
           - os: linux
             arch: mipsle
             suffix: linux_mipsle
-            goflags: GOOS=linux GOARCH=mipsle GOMIPS=softfloat
+            goflags: CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat
+            ldflags: "-s -w -extldflags=-static"
+            tags: "netgo osusergo"
           - os: linux
             arch: amd64
             suffix: linux_amd64
             goflags: GOOS=linux GOARCH=amd64
+            ldflags: "-s -w"
+            tags: ""
           - os: linux
             arch: arm64
             suffix: linux_arm64
             goflags: GOOS=linux GOARCH=arm64
+            ldflags: "-s -w"
+            tags: ""
           - os: windows
             arch: amd64
             suffix: windows_amd64
             goflags: GOOS=windows GOARCH=amd64
+            ldflags: "-s -w"
+            tags: ""
 
     steps:
     - uses: actions/checkout@v4
@@ -43,7 +51,7 @@ jobs:
 
     - name: Build for ${{ matrix.target.os }}/${{ matrix.target.arch }}
       run: |
-        ${{ matrix.target.goflags }} go build -ldflags="-s -w" -o pipet_${{ matrix.target.suffix }}.${{ matrix.target.os == 'windows' && 'exe' || '' }}
+        ${{ matrix.target.goflags }} go build -ldflags="${{ matrix.target.ldflags }}" ${{ matrix.target.tags != '' && format('-tags="{0}"', matrix.target.tags) || '' }} -o pipet_${{ matrix.target.suffix }}.${{ matrix.target.os == 'windows' && 'exe' || '' }}
         ls -la pipet_*
 
     - name: Upload artifact
@@ -80,6 +88,6 @@ jobs:
           
           gh release create "$VERSION" \
             --title "Development Build $VERSION" \
-            --notes "Automatic build from commit ${{ github.sha }}%0A%0A**Platforms:**%0A- Linux amd64%0A- Linux arm64%0A- Linux mipsle (MT7620A)%0A- Windows amd64" \
+            --notes "Automatic build from commit ${{ github.sha }}%0A%0A**Platforms:**%0A- Linux amd64%0A- Linux arm64%0A- Linux mipsle (极路由2 - 已禁用CGO，静态编译)%0A- Windows amd64" \
             --prerelease \
             artifacts/*
