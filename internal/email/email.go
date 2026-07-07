@@ -2,6 +2,7 @@
 package email
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/smtp"
@@ -48,9 +49,60 @@ func SendEmail(subject, body string) error {
 	auth := smtp.PlainAuth("", Config.FromEmail, Config.AuthCode, Config.SMTPServer)
 
 	log.Printf("连接 SMTP 服务器: %s\n", addr)
-	err := smtp.SendMail(addr, auth, Config.FromEmail, []string{Config.ToEmail}, msg)
+
+	// 使用 TLS 连接
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         Config.SMTPServer,
+	}
+
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
-		log.Printf("邮件发送失败: %v\n", err)
+		log.Printf("TLS 连接失败: %v\n", err)
+		return err
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, Config.SMTPServer)
+	if err != nil {
+		log.Printf("创建 SMTP 客户端失败: %v\n", err)
+		return err
+	}
+	defer client.Close()
+
+	// 认证
+	if err := client.Auth(auth); err != nil {
+		log.Printf("SMTP 认证失败: %v\n", err)
+		return err
+	}
+
+	// 设置发件人和收件人
+	if err := client.Mail(Config.FromEmail); err != nil {
+		log.Printf("设置发件人失败: %v\n", err)
+		return err
+	}
+
+	if err := client.Rcpt(Config.ToEmail); err != nil {
+		log.Printf("设置收件人失败: %v\n", err)
+		return err
+	}
+
+	// 发送邮件内容
+	w, err := client.Data()
+	if err != nil {
+		log.Printf("获取数据写入器失败: %v\n", err)
+		return err
+	}
+
+	_, err = w.Write(msg)
+	if err != nil {
+		log.Printf("写入邮件内容失败: %v\n", err)
+		return err
+	}
+
+	err = w.Close()
+	if err != nil {
+		log.Printf("关闭数据写入器失败: %v\n", err)
 		return err
 	}
 
