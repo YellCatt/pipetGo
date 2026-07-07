@@ -34,6 +34,19 @@ go build -ldflags="-s -w" -o pipet.exe
 - Windows amd64 构建
 - 自动产物上传
 
+## 运行时文件结构
+
+编译后的 `pipet.exe` 运行时需要以下文件结构：
+
+```
+pipet.exe           # 可执行文件
+config/             # 配置目录
+  └── config.yaml   # 配置文件
+testcases/          # 测试用例目录（可选）
+  └── *.psv         # PSV/CSV 测试用例文件
+reports/            # 报告输出目录（自动创建）
+```
+
 ## 配置
 
 编辑 `config/config.yaml` 文件：
@@ -52,6 +65,25 @@ test:
   report_dir: "./reports"
   test_case_dir: "./testcases"
 ```
+
+### 必需文件
+
+| 文件/目录 | 说明 | 是否必需 |
+|-----------|------|----------|
+| `pipet.exe` | 主程序可执行文件 | **是** |
+| `config/config.yaml` | 配置文件 | **是** |
+| `testcases/` | 测试用例目录 | 否（运行时指定路径则不需要） |
+| `reports/` | 报告输出目录 | 否（自动创建） |
+
+### 配置说明
+
+- **base_url**: API 目标地址，测试用例中可用 `{{base_url}}` 引用
+- **timeout**: 请求超时时间（秒）
+- **log.level**: 日志级别（debug, info, warn, error）
+- **log.encoding**: 日志格式（json, console）
+- **log.output**: 日志输出（stdout 或文件路径）
+- **test.report_dir**: 测试报告输出目录
+- **test.test_case_dir**: 默认测试用例目录
 
 ## 使用方法
 

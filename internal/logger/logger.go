@@ -2,6 +2,9 @@ package logger
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -32,9 +35,16 @@ func InitLogger(cfg LogConfig) {
 	if cfg.Output == "stdout" {
 		outputPaths = []string{"stdout"}
 	} else {
-		outputPaths = []string{cfg.Output}
+		logPath := addTimestampToFilename(cfg.Output)
+		ensureDir(logPath)
+		outputPaths = []string{logPath}
 	}
 	zapConfig.OutputPaths = outputPaths
+
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	zapConfig.EncoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+		enc.AppendString(t.In(loc).Format("2006-01-02 15:04:05.000"))
+	}
 
 	var err error
 	log, err = zapConfig.Build()
@@ -45,6 +55,26 @@ func InitLogger(cfg LogConfig) {
 
 	zap.ReplaceGlobals(log)
 }
+
+func addTimestampToFilename(path string) string {
+	dir := filepath.Dir(path)
+	filename := filepath.Base(path)
+	
+	ext := filepath.Ext(filename)
+	nameWithoutExt := strings.TrimSuffix(filename, ext)
+	
+	timestamp := time.Now().Format("20060102_150405")
+	
+	return filepath.Join(dir, nameWithoutExt+"_"+timestamp+ext)
+}
+
+func ensureDir(path string) {
+	dir := filepath.Dir(path)
+	if dir != "." && dir != "/" {
+		os.MkdirAll(dir, 0755)
+	}
+}
+
 
 func getLogLevel(level string) zapcore.Level {
 	switch level {

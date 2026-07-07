@@ -248,16 +248,31 @@ func parseKeyValueMap(str string) map[string]string {
 		return m
 	}
 
-	str = strings.TrimPrefix(strings.TrimSuffix(str, "}"), "{")
-	pairs := strings.Split(str, ",")
-	for _, pair := range pairs {
-		kv := strings.SplitN(strings.TrimSpace(pair), ":", 2)
-		if len(kv) == 2 {
-			key := strings.TrimSpace(strings.Trim(kv[0], "\"'"))
-			value := strings.TrimSpace(strings.Trim(kv[1], "\"'"))
-			m[key] = value
+	if strings.HasPrefix(str, "{") && strings.HasSuffix(str, "}") {
+		str = strings.TrimPrefix(strings.TrimSuffix(str, "}"), "{")
+		pairs := strings.Split(str, ",")
+		for _, pair := range pairs {
+			kv := strings.SplitN(strings.TrimSpace(pair), ":", 2)
+			if len(kv) == 2 {
+				key := strings.TrimSpace(strings.Trim(kv[0], "\"'"))
+				value := strings.TrimSpace(strings.Trim(kv[1], "\"'"))
+				m[key] = value
+			}
+		}
+	} else if strings.Contains(str, "&") {
+		pairs := strings.Split(str, "&")
+		for _, pair := range pairs {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) == 2 {
+				key := strings.TrimSpace(kv[0])
+				value := strings.TrimSpace(kv[1])
+				m[key] = value
+			} else if len(kv) == 1 {
+				m[strings.TrimSpace(kv[0])] = ""
+			}
 		}
 	}
+
 	return m
 }
 

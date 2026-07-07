@@ -5,7 +5,7 @@ target:
 log:
   level: "info"
   encoding: "json"
-  output: "stdout"
+  output: "./logs/pipet.log
 
 test:
   report_dir: "./reports"
