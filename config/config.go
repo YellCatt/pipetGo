@@ -17,6 +17,7 @@ type Config struct {
 	Target TargetConfig `mapstructure:"target"` // 目标 API 配置
 	Log    LogConfig    `mapstructure:"log"`    // 日志配置
 	Test   TestConfig   `mapstructure:"test"`   // 测试配置
+	Email  EmailConfig  `mapstructure:"email"`  // 邮件配置
 }
 
 // TargetConfig 表示目标 API 的配置
@@ -36,6 +37,15 @@ type LogConfig struct {
 type TestConfig struct {
 	ReportDir   string `mapstructure:"report_dir"`    // 测试报告输出目录
 	TestCaseDir string `mapstructure:"test_case_dir"` // 默认测试用例目录
+}
+
+// EmailConfig 表示邮件发送相关的配置
+type EmailConfig struct {
+	From       string `mapstructure:"from"`        // 发件人邮箱
+	To         string `mapstructure:"to"`          // 收件人邮箱
+	AuthCode   string `mapstructure:"auth_code"`   // 邮箱授权码
+	SMTPServer string `mapstructure:"smtp_server"` // SMTP 服务器地址
+	SMTPPort   int    `mapstructure:"smtp_port"`   // SMTP 端口
 }
 
 // AppConfig 存储全局配置实例

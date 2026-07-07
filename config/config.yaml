@@ -10,3 +10,10 @@ log:
 test:
   report_dir: "./reports"
   test_case_dir: "./testcases"
+
+email:
+  from: "768305875@qq.com"
+  to: "768305875@qq.com"
+  auth_code: "gpfruabgjebubdad"
+  smtp_server: "smtp.qq.com"
+  smtp_port: 465

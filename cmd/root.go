@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"pipetGo/config"
+	"pipetGo/internal/email"
 	"pipetGo/internal/httpclient"
 	"pipetGo/internal/logger"
 	"pipetGo/internal/psv"
@@ -52,7 +53,7 @@ func init() {
 }
 
 // initConfig 初始化应用配置
-// 依次初始化：配置、日志、全局变量
+// 依次初始化：配置、日志、全局变量、邮件配置
 func initConfig() {
 	config.InitConfig()
 	logger.InitLogger(logger.LogConfig{
@@ -61,6 +62,14 @@ func initConfig() {
 		Output:   config.AppConfig.Log.Output,
 	})
 	vars.Set("base_url", config.AppConfig.Target.BaseURL)
+
+	email.InitEmail(email.EmailConfig{
+		FromEmail:  config.AppConfig.Email.From,
+		ToEmail:    config.AppConfig.Email.To,
+		AuthCode:   config.AppConfig.Email.AuthCode,
+		SMTPServer: config.AppConfig.Email.SMTPServer,
+		SMTPPort:   config.AppConfig.Email.SMTPPort,
+	})
 }
 
 // runTests 执行测试主流程
@@ -124,6 +133,11 @@ func runTests(paths []string) {
 		if !r.Passed && !r.TestCase.Skip {
 			failedCount++
 		}
+	}
+
+	// 测试结束后发送邮件报告
+	if err := email.SendTestReportEmail(results); err != nil {
+		logger.Warn("Failed to send email report", zap.Error(err))
 	}
 
 	if failedCount > 0 {
