@@ -42,6 +42,11 @@ jobs:
       with:
         go-version: '1.22'
 
+    - name: Fix go modules
+      run: |
+        go clean -modcache
+        go mod tidy
+
     - name: Build for ${{ matrix.target.os }}/${{ matrix.target.arch }}
       env:
         GOOS: ${{ matrix.target.os }}
