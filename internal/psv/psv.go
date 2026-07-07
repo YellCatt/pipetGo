@@ -24,10 +24,13 @@ type StreamAssert struct {
 
 type TestCase struct {
 	ID             string            `mapstructure:"id"`
+	Name           string            `mapstructure:"name"`
 	Skip           bool              `mapstructure:"skip"`
+	SkipReason     string            `mapstructure:"skip_reason"`
 	Desc           string            `mapstructure:"desc"`
 	Method         string            `mapstructure:"method"`
 	URL            string            `mapstructure:"url"`
+	Endpoint       string            `mapstructure:"endpoint"`
 	Headers        map[string]string `mapstructure:"headers"`
 	Params         map[string]string `mapstructure:"params"`
 	Form           map[string]string `mapstructure:"form"`
@@ -35,6 +38,7 @@ type TestCase struct {
 	Body           string            `mapstructure:"body"`
 	Payload        string            `mapstructure:"payload"`
 	ExpectedStatus int               `mapstructure:"expected_status"`
+	ExpectedCode   int               `mapstructure:"expected_code"`
 	ExpectedBody   string            `mapstructure:"expected_body"`
 	Tags           []string          `mapstructure:"tags"`
 	Extract        string            `mapstructure:"extract"`

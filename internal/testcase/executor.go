@@ -79,7 +79,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 				filePath := strings.TrimPrefix(strings.TrimPrefix(v, "@"), "file://")
 				req.SetFile(k, filePath)
 			} else {
-				req.SetFormData(k, v)
+				req.SetFormField(k, v)
 			}
 		}
 	} else if tc.JSON != "" {
@@ -238,7 +238,7 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 			}
 		}
 
-		if ok, errMsg := assert.StreamAssert(aggregatedContent.String(), chunkCount, assertConfigs); ok {
+		if ok, _ := assert.StreamAssert(aggregatedContent.String(), chunkCount, assertConfigs); ok {
 			result.Passed = true
 			result.EndTime = time.Now()
 			result.Duration = result.EndTime.Sub(startTime)
