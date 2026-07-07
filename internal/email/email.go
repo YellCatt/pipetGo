@@ -61,8 +61,11 @@ func SendEmail(subject, body string) error {
 func GenerateTestReportContent(results []testcase.TestResult) string {
 	var sb strings.Builder
 
-	// 使用东八区时间
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	// 使用东八区时间，加载失败时使用 UTC
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.UTC
+	}
 	now := time.Now().In(loc)
 
 	sb.WriteString(fmt.Sprintf("===== 测试报告 =====\n\n"))
@@ -132,8 +135,11 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 		return nil
 	}
 
-	// 使用东八区时间
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	// 使用东八区时间，加载失败时使用 UTC
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.UTC
+	}
 	subject := fmt.Sprintf("【测试报告】pipetGo - %s", time.Now().In(loc).Format("2006-01-02 15:04"))
 	body := GenerateTestReportContent(results)
 

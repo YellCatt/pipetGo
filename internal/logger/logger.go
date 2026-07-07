@@ -81,8 +81,11 @@ func addTimestampToFilename(path string) string {
 	ext := filepath.Ext(filename)
 	nameWithoutExt := strings.TrimSuffix(filename, ext)
 
-	// 使用东八区时间
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	// 使用东八区时间，加载失败时使用 UTC
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.UTC
+	}
 	timestamp := time.Now().In(loc).Format("20060102_150405")
 
 	return filepath.Join(dir, nameWithoutExt+"_"+timestamp+ext)
