@@ -270,6 +270,11 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 		tc.ID = generateID(tc)
 	}
 
+	// 如果没有指定method，默认为GET
+	if tc.Method == "" {
+		tc.Method = "GET"
+	}
+
 	return tc, nil
 }
 
