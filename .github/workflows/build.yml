@@ -6,34 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target:
-          - os: linux
-            arch: mipsle
-            mips: softfloat
-            suffix: linux_mipsle
-          - os: linux
-            arch: amd64
-            suffix: linux_amd64
-          - os: linux
-            arch: arm64
-            suffix: linux_arm64
-          - os: linux
-            arch: 386
-            suffix: linux_i386
-          - os: windows
-            arch: amd64
-            suffix: windows_amd64
-          - os: darwin
-            arch: amd64
-            suffix: darwin_amd64
-          - os: darwin
-            arch: arm64
-            suffix: darwin_arm64
-
+  build-windows:
+    runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
 
@@ -47,53 +21,13 @@ jobs:
         go clean -modcache
         go mod tidy
 
-    - name: Build for ${{ matrix.target.os }}/${{ matrix.target.arch }}
-      env:
-        GOOS: ${{ matrix.target.os }}
-        GOARCH: ${{ matrix.target.arch }}
-        GOMIPS: ${{ matrix.target.mips }}
+    - name: Build for Windows amd64
       run: |
-        if [ "${{ matrix.target.os }}" = "windows" ]; then
-          go build -ldflags="-s -w" -o pipet_${{ matrix.target.suffix }}.exe
-        else
-          go build -ldflags="-s -w" -o pipet_${{ matrix.target.suffix }}
-        fi
-        ls -la pipet_*
+        go build -ldflags="-s -w" -o pipet_windows_amd64.exe
+        dir pipet_*.exe
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: pipet_${{ matrix.target.suffix }}
-        path: pipet_*
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: List downloaded artifacts
-        run: ls -la artifacts/
-
-      - name: Create or Update Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="dev-$(date +%Y%m%d-%H%M%S)"
-          
-          gh release delete "$VERSION" --yes 2>/dev/null || true
-          
-          gh release create "$VERSION" \
-            --title "Development Build $VERSION" \
-            --notes "Automatic build from commit ${{ github.sha }}%0A%0A**Platforms:**%0A- Linux amd64%0A- Linux arm64%0A- Linux i386%0A- Linux mipsle (MT7620A)%0A- Windows amd64%0A- macOS amd64%0A- macOS arm64" \
-            --prerelease \
-            artifacts/*
+        name: pipet_windows_amd64
+        path: pipet_windows_amd64.exe
