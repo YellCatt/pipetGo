@@ -61,8 +61,12 @@ func SendEmail(subject, body string) error {
 func GenerateTestReportContent(results []testcase.TestResult) string {
 	var sb strings.Builder
 
+	// 使用东八区时间
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	now := time.Now().In(loc)
+
 	sb.WriteString(fmt.Sprintf("===== 测试报告 =====\n\n"))
-	sb.WriteString(fmt.Sprintf("执行时间: %s\n", time.Now().Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("执行时间: %s\n", now.Format("2006-01-02 15:04:05")))
 
 	var passed, failed, skipped int
 	var totalDuration time.Duration
@@ -128,7 +132,9 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 		return nil
 	}
 
-	subject := fmt.Sprintf("【测试报告】pipetGo - %s", time.Now().Format("2006-01-02 15:04"))
+	// 使用东八区时间
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	subject := fmt.Sprintf("【测试报告】pipetGo - %s", time.Now().In(loc).Format("2006-01-02 15:04"))
 	body := GenerateTestReportContent(results)
 
 	log.Println("发送测试报告邮件...")

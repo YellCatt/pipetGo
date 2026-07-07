@@ -71,7 +71,7 @@ func InitLogger(cfg LogConfig) {
 	zap.ReplaceGlobals(log)
 }
 
-// addTimestampToFilename 为日志文件名添加时间戳
+// addTimestampToFilename 为日志文件名添加时间戳（东八区）
 // path: 原始文件路径
 // 返回: 添加时间戳后的文件路径
 func addTimestampToFilename(path string) string {
@@ -81,7 +81,9 @@ func addTimestampToFilename(path string) string {
 	ext := filepath.Ext(filename)
 	nameWithoutExt := strings.TrimSuffix(filename, ext)
 
-	timestamp := time.Now().Format("20060102_150405")
+	// 使用东八区时间
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	timestamp := time.Now().In(loc).Format("20060102_150405")
 
 	return filepath.Join(dir, nameWithoutExt+"_"+timestamp+ext)
 }
