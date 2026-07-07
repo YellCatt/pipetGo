@@ -154,7 +154,7 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 
 func StreamAssert(aggregatedContent string, chunkCount int, asserts []StreamAssertConfig) (bool, string) {
 	for _, sa := range asserts {
-		if ok, err := checkStreamAssert(aggregatedContent, chunkCount, sa); ok {
+		if ok, _ := checkStreamAssert(aggregatedContent, chunkCount, sa); ok {
 			return true, ""
 		}
 	}
