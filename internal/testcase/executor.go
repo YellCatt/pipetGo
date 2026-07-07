@@ -73,14 +73,18 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	}
 
 	if hasFileField(tc.Form) {
+		formData := make(map[string]string)
 		for k, v := range tc.Form {
 			v = vars.Replace(v)
 			if strings.HasPrefix(v, "@") || strings.HasPrefix(v, "file://") {
 				filePath := strings.TrimPrefix(strings.TrimPrefix(v, "@"), "file://")
 				req.SetFile(k, filePath)
 			} else {
-				req.SetFormField(k, v)
+				formData[k] = v
 			}
+		}
+		if len(formData) > 0 {
+			req.SetFormData(formData)
 		}
 	} else if tc.JSON != "" {
 		req.SetHeader("Content-Type", "application/json")
