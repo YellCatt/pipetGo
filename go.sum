@@ -1,7 +1,7 @@
 github.com/go-playground/universal-translator v0.18.1 h1:Bcnm0ZwsGyWbCzImXv+pAJnYK9S473LQFuzCbDbfSFY=
 github.com/go-playground/universal-translator v0.18.1/go.mod h1:xekY+UJKNuX9WP91TpwSH2VMlDf28Uj24BCp08ZFTUY=
 github.com/go-playground/validator/v10 v10.16.0 h1:uvJfwdm5QfeKC2PMdA1MxnP3C0URlMG6J10lGd+VQ8U=
-github.com/go-playground/validator/v10 v10.16.0/go.mod h1:bdFtH8nmzC7jL2qswblsxQ4mLypfmHUB+G6q0d9YjNY=
+github.com/go-playground/validator/v10 v10.16.0/go.mod h1:9iXMNT7sEkjXb0I+enO7QXmzG6QCsPWY4zveKFVRSyU=
 github.com/go-resty/resty/v2 v2.12.0 h1:Y45Y7u0p6y0s9wJ0c4V5G0j0w0l0x0r0B0p0B0p0B0=
 github.com/go-resty/resty/v2 v2.12.0/go.mod h1:z8BVo6PvndSri0LbOE3hAn0apkU+1YvI6E70E9jsnvY=
 github.com/golang/protobuf v1.5.3 h1:KhyjKVUg7Usr/dYsdSqoFveMYd5ko72D+zANwlG1mmg=
