@@ -81,7 +81,7 @@ func ParseFiles(paths []string) ([]TestCase, error) {
 func expandPath(path string) ([]string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		files, err := doublestar.FilePathGlob(path)
+		files, err := doublestar.Glob(os.DirFS("."), path)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +89,15 @@ func expandPath(path string) ([]string, error) {
 	}
 
 	if info.IsDir() {
-		return doublestar.FilePathGlob(filepath.Join(path, "*.psv"))
+		matches, err := doublestar.Glob(os.DirFS(path), "*.psv")
+		if err != nil {
+			return nil, err
+		}
+		var files []string
+		for _, match := range matches {
+			files = append(files, filepath.Join(path, match))
+		}
+		return files, nil
 	}
 	return []string{path}, nil
 }
