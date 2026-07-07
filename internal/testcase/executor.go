@@ -1,3 +1,5 @@
+// Package testcase 提供测试用例执行和结果管理功能
+// 包括 HTTP 请求执行、断言验证、变量提取和报告生成
 package testcase
 
 import (
@@ -21,23 +23,32 @@ import (
 	"pipet/internal/vars"
 )
 
+// TestResult 表示测试用例执行结果
 type TestResult struct {
-	TestCase     psv.TestCase
-	Passed       bool
-	Error        string
-	Duration     time.Duration
-	StartTime    time.Time
-	EndTime      time.Time
-	ResponseBody string
+	TestCase      psv.TestCase    // 测试用例
+	Passed        bool            // 是否通过
+	Error         string          // 错误信息
+	Duration      time.Duration   // 执行时长
+	StartTime     time.Time       // 开始时间
+	EndTime       time.Time       // 结束时间
+	ResponseBody  string          // 响应体
+	ActualStatus  int             // 实际状态码
+	RequestHeaders string         // 请求头（JSON格式）
+	RequestBody   string         // 请求体
+	ExtractedVars string         // 提取的变量（JSON格式）
 }
 
+// 全局变量用于存储测试结果和提取的变量
 var (
-	results      []TestResult
-	resultsMu    sync.Mutex
-	globalVars   = make(map[string]string)
-	globalVarsMu sync.Mutex
+	results      []TestResult           // 测试结果列表
+	resultsMu    sync.Mutex             // 保护 results 的互斥锁
+	globalVars   = make(map[string]string) // 全局变量存储
+	globalVarsMu sync.Mutex             // 保护 globalVars 的互斥锁
 )
 
+// ExecuteTestCase 执行单个测试用例
+// tc: 测试用例
+// 返回: 测试结果
 func ExecuteTestCase(tc psv.TestCase) TestResult {
 	startTime := time.Now()
 	result := TestResult{
@@ -47,6 +58,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 
 	logger.Info("Running test", zap.String("id", tc.ID), zap.String("desc", tc.Desc))
 
+	// 如果标记为跳过，直接返回通过
 	if tc.Skip {
 		logger.Info("Skipping test", zap.String("id", tc.ID))
 		result.Passed = true
@@ -55,6 +67,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		return result
 	}
 
+	// 变量替换：将 {{var}} 替换为实际值
 	processedURL := vars.Replace(tc.URL)
 	processedHeaders := make(map[string]string)
 	for k, v := range tc.Headers {
@@ -63,15 +76,40 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	processedBody := vars.Replace(tc.Body)
 	processedJSON := vars.Replace(tc.JSON)
 
+	// 构建请求体（用于报告记录）
+	var requestBody string
+	if tc.JSON != "" {
+		requestBody = processedJSON
+	} else if tc.Body != "" {
+		requestBody = processedBody
+	} else if tc.Payload != "" {
+		requestBody = vars.Replace(tc.Payload)
+	} else if len(tc.Form) > 0 {
+		formData := make(map[string]string)
+		for k, v := range tc.Form {
+			formData[k] = vars.Replace(v)
+		}
+		formJSON, _ := json.Marshal(formData)
+		requestBody = string(formJSON)
+	}
+
+	// 请求头转JSON（用于报告记录）
+	headersJSON, _ := json.Marshal(processedHeaders)
+	result.RequestHeaders = string(headersJSON)
+	result.RequestBody = requestBody
+
+	// 创建 HTTP 请求
 	req := httpclient.Client.R()
 	for k, v := range processedHeaders {
 		req.SetHeader(k, v)
 	}
 
+	// 设置 URL 参数
 	for k, v := range tc.Params {
 		req.SetQueryParam(k, vars.Replace(v))
 	}
 
+	// 处理表单数据（支持文件上传）
 	if hasFileField(tc.Form) {
 		formData := make(map[string]string)
 		for k, v := range tc.Form {
@@ -87,9 +125,11 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			req.SetFormData(formData)
 		}
 	} else if tc.JSON != "" {
+		// JSON 请求体
 		req.SetHeader("Content-Type", "application/json")
 		req.SetBody(processedJSON)
 	} else if len(tc.Form) > 0 {
+		// 表单数据
 		formData := make(map[string]string)
 		for k, v := range tc.Form {
 			formData[k] = vars.Replace(v)
@@ -97,14 +137,17 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		req.SetHeader("Content-Type", "application/x-www-form-urlencoded")
 		req.SetFormData(formData)
 	} else if tc.Body != "" {
+		// 原始请求体
 		req.SetBody(processedBody)
 	} else if tc.Payload != "" {
+		// 兼容性字段
 		req.SetBody(vars.Replace(tc.Payload))
 	}
 
 	var resp *resty.Response
 	var err error
 
+	// 根据 HTTP 方法执行请求
 	switch tc.Method {
 	case http.MethodGet:
 		resp, err = req.Get(processedURL)
@@ -122,6 +165,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		err = fmt.Errorf("unsupported HTTP method: %s", tc.Method)
 	}
 
+	// 请求执行失败
 	if err != nil {
 		result.Error = err.Error()
 		result.Passed = false
@@ -132,10 +176,13 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	}
 
 	result.ResponseBody = string(resp.Body())
+	result.ActualStatus = resp.StatusCode()
 
+	// 流式模式处理
 	if tc.StreamMode {
 		result = executeStreamAssert(tc, resp, startTime)
 	} else {
+		// 普通模式断言
 		if tc.ExpectedStatus > 0 && resp.StatusCode() != tc.ExpectedStatus {
 			result.Error = fmt.Sprintf("expected status %d, got %d", tc.ExpectedStatus, resp.StatusCode())
 			result.Passed = false
@@ -145,6 +192,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			return result
 		}
 
+		// 正则表达式断言
 		if tc.BodyRegex != "" {
 			if ok, errMsg := assert.BodyRegexMatch(result.ResponseBody, tc.BodyRegex); !ok {
 				result.Error = errMsg
@@ -156,6 +204,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			}
 		}
 
+		// JSON 响应体断言
 		if tc.ExpectedBody != "" {
 			if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), result.ResponseBody, tc.MatchMode); !ok {
 				result.Error = errMsg
@@ -168,6 +217,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		}
 	}
 
+	// 提取变量（用于链式测试）
 	if tc.Extract != "" {
 		extractedVars, err := assert.ExtractVariables(result.ResponseBody, tc.Extract)
 		if err == nil {
@@ -177,10 +227,14 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 				vars.Set(k, v)
 			}
 			globalVarsMu.Unlock()
+			// 记录提取的变量到结果中
+			extractedVarsJSON, _ := json.Marshal(extractedVars)
+			result.ExtractedVars = string(extractedVarsJSON)
 			logger.Info("Extracted variables", zap.String("id", tc.ID), zap.Any("vars", extractedVars))
 		}
 	}
 
+	// 测试通过
 	result.Passed = true
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(startTime)
@@ -189,6 +243,9 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	return result
 }
 
+// hasFileField 检查表单是否包含文件上传字段
+// form: 表单数据
+// 返回: 是否包含文件字段
 func hasFileField(form map[string]string) bool {
 	for _, v := range form {
 		if strings.HasPrefix(v, "@") || strings.HasPrefix(v, "file://") {
@@ -198,6 +255,11 @@ func hasFileField(form map[string]string) bool {
 	return false
 }
 
+// executeStreamAssert 执行流式响应断言
+// tc: 测试用例
+// resp: HTTP 响应
+// startTime: 开始时间
+// 返回: 测试结果
 func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.Time) TestResult {
 	result := TestResult{
 		TestCase:  tc,
@@ -210,6 +272,7 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 	var aggregatedContent strings.Builder
 	chunkCount := 0
 
+	// 解析 SSE（Server-Sent Events）格式响应
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "data: ") {
@@ -231,6 +294,7 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 		}
 	}
 
+	// 执行流式断言
 	if len(tc.StreamAssert) > 0 {
 		assertConfigs := make([]assert.StreamAssertConfig, len(tc.StreamAssert))
 		for i, sa := range tc.StreamAssert {
@@ -251,9 +315,11 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 		}
 	}
 
+	// 构建聚合结果
 	aggregatedResult := assert.BuildAggregatedResult(aggregatedContent.String(), chunkCount)
 	result.ResponseBody = aggregatedResult
 
+	// JSON 响应体断言
 	if tc.ExpectedBody != "" {
 		if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), aggregatedResult, tc.MatchMode); !ok {
 			result.Error = errMsg
@@ -270,6 +336,10 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 	return result
 }
 
+// FilterByTags 根据标签过滤测试用例
+// testCases: 测试用例列表
+// tags: 标签列表
+// 返回: 过滤后的测试用例列表
 func FilterByTags(testCases []psv.TestCase, tags []string) []psv.TestCase {
 	if len(tags) == 0 {
 		return testCases
@@ -293,6 +363,9 @@ func FilterByTags(testCases []psv.TestCase, tags []string) []psv.TestCase {
 	return filtered
 }
 
+// RunParallel 并行执行测试用例
+// testCases: 测试用例列表
+// 返回: 测试结果列表
 func RunParallel(testCases []psv.TestCase) []TestResult {
 	var wg sync.WaitGroup
 	resultChan := make(chan TestResult, len(testCases))
@@ -317,69 +390,113 @@ func RunParallel(testCases []psv.TestCase) []TestResult {
 	return results
 }
 
+// GetResults 获取所有测试结果
+// 返回: 测试结果列表
 func GetResults() []TestResult {
 	resultsMu.Lock()
 	defer resultsMu.Unlock()
 	return append([]TestResult{}, results...)
 }
 
+// AddResult 添加测试结果
+// result: 测试结果
 func AddResult(result TestResult) {
 	resultsMu.Lock()
 	defer resultsMu.Unlock()
 	results = append(results, result)
 }
 
+// GenerateReport 生成测试报告
+// results: 测试结果列表
+// 返回: 全部报告内容, 错误报告内容
 func GenerateReport(results []TestResult) (string, string) {
 	var allReport strings.Builder
 	var errorReport strings.Builder
 
-	allReport.WriteString("id|skip|desc|method|url|expected_status|actual_status|passed|error|duration|start_time|end_time\n")
-	errorReport.WriteString("id|skip|desc|method|url|expected_status|actual_status|passed|error|duration|start_time|end_time|response_body\n")
+	// 使用新的报告格式
+	header := "id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars\n"
+	allReport.WriteString(header)
+	errorReport.WriteString(header)
 
 	for _, result := range results {
-		line := fmt.Sprintf("%s|%t|%s|%s|%s|%d|%d|%t|%s|%s|%s|%s\n",
-			result.TestCase.ID,
-			result.TestCase.Skip,
-			result.TestCase.Desc,
+		// 确定测试状态
+		status := "PASS"
+		if result.TestCase.Skip {
+			status = "SKIP"
+		} else if !result.Passed {
+			status = "FAIL"
+		}
+
+		// 标签列表转字符串
+		tags := strings.Join(result.TestCase.Tags, ",")
+
+		// 前置条件转字符串
+		preConditions := strings.Join(result.TestCase.Pre, ";")
+
+		// 后置条件转字符串
+		postConditions := strings.Join(result.TestCase.Post, ";")
+
+		// 差异信息（错误信息）
+		diff := result.Error
+
+		line := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%.3f|%d|%d|%s|%s|%s|%s|%s|%s\n",
+			escapePipe(result.TestCase.ID),
+			escapePipe(result.TestCase.Desc),
 			result.TestCase.Method,
-			result.TestCase.URL,
+			escapePipe(result.TestCase.URL),
+			escapePipe(result.RequestHeaders),
+			escapePipe(result.RequestBody),
+			tags,
+			status,
+			result.Duration.Seconds(),
 			result.TestCase.ExpectedStatus,
-			0,
-			result.Passed,
-			result.Error,
-			result.Duration,
-			result.StartTime.Format(time.RFC3339),
-			result.EndTime.Format(time.RFC3339),
+			result.ActualStatus,
+			escapePipe(diff),
+			escapePipe(result.ResponseBody),
+			escapePipe(result.TestCase.ExpectedBody),
+			escapePipe(preConditions),
+			escapePipe(postConditions),
+			escapePipe(result.ExtractedVars),
 		)
 		allReport.WriteString(line)
 
-		if !result.Passed {
-			errorLine := line[:len(line)-1] + "|" + escapePipe(result.ResponseBody) + "\n"
-			errorReport.WriteString(errorLine)
+		// 错误报告只包含失败的测试用例
+		if !result.Passed && !result.TestCase.Skip {
+			errorReport.WriteString(line)
 		}
 	}
 
 	return allReport.String(), errorReport.String()
 }
 
+// escapePipe 转义管道符
+// s: 输入字符串
+// 返回: 转义后的字符串
 func escapePipe(s string) string {
 	return strings.ReplaceAll(s, "|", "\\|")
 }
 
+// SaveReports 保存测试报告到文件
+// allReport: 全部报告内容
+// errorReport: 错误报告内容
+// 返回: 全部报告路径, 错误报告路径
 func SaveReports(allReport, errorReport string) (string, string) {
 	timestamp := time.Now().Format("20060102_150405")
 	reportDir := config.AppConfig.Test.ReportDir
 
+	// 创建报告目录
 	if err := os.MkdirAll(reportDir, 0755); err != nil {
 		logger.Error("Failed to create report directory", zap.Error(err))
 		return "", ""
 	}
 
+	// 保存全部报告
 	allPath := fmt.Sprintf("%s/report_%s.psv", reportDir, timestamp)
 	if err := os.WriteFile(allPath, []byte(allReport), 0644); err != nil {
 		logger.Error("Failed to save report", zap.Error(err))
 	}
 
+	// 保存错误报告（如果有失败的测试）
 	var errorPath string
 	if errorReport != "" {
 		errorPath = fmt.Sprintf("%s/report_%s_error.psv", reportDir, timestamp)
@@ -392,10 +509,13 @@ func SaveReports(allReport, errorReport string) (string, string) {
 	return allPath, errorPath
 }
 
+// PrintSummary 打印测试摘要
+// results: 测试结果列表
 func PrintSummary(results []TestResult) {
 	var passed, failed, skipped int
 	var totalDuration time.Duration
 
+	// 统计结果
 	for _, r := range results {
 		totalDuration += r.Duration
 		if r.TestCase.Skip {
@@ -407,12 +527,14 @@ func PrintSummary(results []TestResult) {
 		}
 	}
 
+	// 打印标题
 	fmt.Println()
 	fmt.Println("╔══════════════════════════════════════════════════════╗")
 	fmt.Println("║              pipet 接口测试                          ║")
 	fmt.Println("╚══════════════════════════════════════════════════════╝")
 	fmt.Println()
 
+	// 打印每个测试用例的结果
 	for _, r := range results {
 		status := "PASS"
 		if r.TestCase.Skip {
@@ -426,6 +548,7 @@ func PrintSummary(results []TestResult) {
 		}
 	}
 
+	// 打印汇总信息
 	fmt.Println()
 	fmt.Printf("Total: %d, Passed: %d, Failed: %d, Skipped: %d\n", passed+failed+skipped, passed, failed, skipped)
 	fmt.Printf("Total duration: %.3fs\n", totalDuration.Seconds())

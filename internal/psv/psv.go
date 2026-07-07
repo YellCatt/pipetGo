@@ -1,3 +1,5 @@
+// Package psv 提供 PSV（管道分隔值）文件解析功能
+// 支持解析 .psv 和 .csv 文件，使用管道符 | 作为分隔符
 package psv
 
 import (
@@ -15,41 +17,46 @@ import (
 	"pipet/internal/logger"
 )
 
+// StreamAssert 表示流式断言配置
 type StreamAssert struct {
-	Kind      string `json:"kind"`
-	Pattern   string `json:"pattern"`
-	MaxWaitMs int    `json:"max_wait_ms"`
-	MinChunks int    `json:"min_chunks"`
+	Kind      string `json:"kind"`      // 断言类型: contains/regex/json_path
+	Pattern   string `json:"pattern"`   // 断言模式
+	MaxWaitMs int    `json:"max_wait_ms"` // 最大等待时间（毫秒）
+	MinChunks int    `json:"min_chunks"` // 最小块数
 }
 
+// TestCase 表示测试用例
 type TestCase struct {
-	ID             string            `mapstructure:"id"`
-	Name           string            `mapstructure:"name"`
-	Skip           bool              `mapstructure:"skip"`
-	SkipReason     string            `mapstructure:"skip_reason"`
-	Desc           string            `mapstructure:"desc"`
-	Method         string            `mapstructure:"method"`
-	URL            string            `mapstructure:"url"`
-	Endpoint       string            `mapstructure:"endpoint"`
-	Headers        map[string]string `mapstructure:"headers"`
-	Params         map[string]string `mapstructure:"params"`
-	Form           map[string]string `mapstructure:"form"`
-	JSON           string            `mapstructure:"json"`
-	Body           string            `mapstructure:"body"`
-	Payload        string            `mapstructure:"payload"`
-	ExpectedStatus int               `mapstructure:"expected_status"`
-	ExpectedCode   int               `mapstructure:"expected_code"`
-	ExpectedBody   string            `mapstructure:"expected_body"`
-	Tags           []string          `mapstructure:"tags"`
-	Extract        string            `mapstructure:"extract"`
-	StreamMode     bool              `mapstructure:"stream_mode"`
-	StreamAssert   []StreamAssert    `mapstructure:"stream_assert"`
-	MatchMode      string            `mapstructure:"match_mode"`
-	BodyRegex      string            `mapstructure:"body_regex"`
-	Pre            []string          `mapstructure:"pre"`
-	Post           []string          `mapstructure:"post"`
+	ID             string            `mapstructure:"id"`              // 测试用例唯一标识
+	Name           string            `mapstructure:"name"`            // 测试用例名称
+	Skip           bool              `mapstructure:"skip"`            // 是否跳过
+	SkipReason     string            `mapstructure:"skip_reason"`     // 跳过原因
+	Desc           string            `mapstructure:"desc"`            // 测试用例描述
+	Method         string            `mapstructure:"method"`          // HTTP方法: GET/POST/PUT/DELETE/PATCH/HEAD
+	URL            string            `mapstructure:"url"`             // 请求URL
+	Endpoint       string            `mapstructure:"endpoint"`        // API端点
+	Headers        map[string]string `mapstructure:"headers"`         // 请求头
+	Params         map[string]string `mapstructure:"params"`          // URL参数
+	Form           map[string]string `mapstructure:"form"`            // 表单数据
+	JSON           string            `mapstructure:"json"`            // JSON请求体
+	Body           string            `mapstructure:"body"`            // 原始请求体
+	Payload        string            `mapstructure:"payload"`         // 兼容性字段
+	ExpectedStatus int               `mapstructure:"expected_status"` // 期望状态码
+	ExpectedCode   int               `mapstructure:"expected_code"`   // 期望状态码（兼容字段）
+	ExpectedBody   string            `mapstructure:"expected_body"`   // 期望响应体
+	Tags           []string          `mapstructure:"tags"`           // 标签列表
+	Extract        string            `mapstructure:"extract"`         // 变量提取规则
+	StreamMode     bool              `mapstructure:"stream_mode"`     // 是否流式模式
+	StreamAssert   []StreamAssert    `mapstructure:"stream_assert"`   // 流式断言规则
+	MatchMode      string            `mapstructure:"match_mode"`      // 匹配模式: exact/subset
+	BodyRegex      string            `mapstructure:"body_regex"`      // 响应体正则表达式
+	Pre            []string          `mapstructure:"pre"`             // 前置条件
+	Post           []string          `mapstructure:"post"`            // 后置条件
 }
 
+// ParseFile 解析单个PSV文件
+// filePath: 文件路径
+// 返回: 测试用例列表和错误信息
 func ParseFile(filePath string) ([]TestCase, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -61,6 +68,9 @@ func ParseFile(filePath string) ([]TestCase, error) {
 	return parseReader(file, filePath)
 }
 
+// ParseFiles 解析多个路径中的PSV文件
+// paths: 文件或目录路径列表
+// 返回: 所有测试用例列表和错误信息
 func ParseFiles(paths []string) ([]TestCase, error) {
 	var allCases []TestCase
 	for _, path := range paths {
@@ -82,6 +92,10 @@ func ParseFiles(paths []string) ([]TestCase, error) {
 	return allCases, nil
 }
 
+// expandPath 展开路径，支持文件和目录
+// 如果是目录，递归查找所有 .psv 和 .csv 文件
+// path: 路径（文件或目录）
+// 返回: 文件路径列表和错误信息
 func expandPath(path string) ([]string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -106,6 +120,10 @@ func expandPath(path string) ([]string, error) {
 	return []string{path}, nil
 }
 
+// parseReader 从读取器解析PSV内容
+// reader: 输入流
+// filePath: 文件路径（用于日志）
+// 返回: 测试用例列表和错误信息
 func parseReader(reader io.Reader, filePath string) ([]TestCase, error) {
 	var testCases []TestCase
 	scanner := bufio.NewScanner(reader)
@@ -116,10 +134,12 @@ func parseReader(reader io.Reader, filePath string) ([]TestCase, error) {
 		line := scanner.Text()
 		lineNum++
 
+		// 跳过空行和注释行
 		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 
+		// 第一行是表头
 		if lineNum == 1 {
 			header = parseLine(line)
 			continue
@@ -143,6 +163,10 @@ func parseReader(reader io.Reader, filePath string) ([]TestCase, error) {
 	return testCases, nil
 }
 
+// parseLine 解析单行PSV内容
+// 支持引号内包含管道符的情况
+// line: 单行文本
+// 返回: 字段数组
 func parseLine(line string) []string {
 	var fields []string
 	var current strings.Builder
@@ -165,6 +189,7 @@ func parseLine(line string) []string {
 	}
 	fields = append(fields, current.String())
 
+	// 去除字段两端的引号和空格
 	for i, f := range fields {
 		fields[i] = strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(f, "\""), "\""))
 	}
@@ -172,6 +197,10 @@ func parseLine(line string) []string {
 	return fields
 }
 
+// parseTestCase 将字段解析为测试用例
+// header: 表头数组
+// fields: 字段数组
+// 返回: 测试用例和错误信息
 func parseTestCase(header []string, fields []string) (TestCase, error) {
 	tc := TestCase{
 		Headers:   make(map[string]string),
@@ -180,6 +209,7 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 		MatchMode: "exact",
 	}
 
+	// 遍历表头和字段，映射到测试用例结构
 	for i, h := range header {
 		if i >= len(fields) {
 			continue
@@ -235,6 +265,7 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 		}
 	}
 
+	// 如果没有指定ID，自动生成
 	if tc.ID == "" {
 		tc.ID = generateID(tc)
 	}
@@ -242,12 +273,19 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 	return tc, nil
 }
 
+// parseKeyValueMap 解析键值对字符串
+// 支持两种格式:
+// 1. JSON对象格式: {"key1":"value1","key2":"value2"}
+// 2. URL查询字符串格式: key1=value1&key2=value2
+// str: 输入字符串
+// 返回: 键值对map
 func parseKeyValueMap(str string) map[string]string {
 	m := make(map[string]string)
 	if str == "" || str == "{}" {
 		return m
 	}
 
+	// JSON对象格式
 	if strings.HasPrefix(str, "{") && strings.HasSuffix(str, "}") {
 		str = strings.TrimPrefix(strings.TrimSuffix(str, "}"), "{")
 		pairs := strings.Split(str, ",")
@@ -260,6 +298,7 @@ func parseKeyValueMap(str string) map[string]string {
 			}
 		}
 	} else if strings.Contains(str, "&") {
+		// URL查询字符串格式
 		pairs := strings.Split(str, "&")
 		for _, pair := range pairs {
 			kv := strings.SplitN(pair, "=", 2)
@@ -276,6 +315,9 @@ func parseKeyValueMap(str string) map[string]string {
 	return m
 }
 
+// parseTags 解析标签字符串
+// str: 逗号分隔的标签字符串
+// 返回: 标签数组
 func parseTags(str string) []string {
 	if str == "" {
 		return nil
@@ -287,6 +329,10 @@ func parseTags(str string) []string {
 	return tags
 }
 
+// parseDelimited 解析分隔符分隔的字符串
+// str: 输入字符串
+// delimiter: 分隔符
+// 返回: 分割后的字符串数组
 func parseDelimited(str string, delimiter string) []string {
 	if str == "" {
 		return nil
@@ -298,6 +344,9 @@ func parseDelimited(str string, delimiter string) []string {
 	return parts
 }
 
+// parseInt 从字符串中提取整数
+// s: 输入字符串
+// 返回: 提取的整数（如果没有数字返回0）
 func parseInt(s string) int {
 	if s == "" {
 		return 0
@@ -314,6 +363,10 @@ func parseInt(s string) int {
 	return result
 }
 
+// generateID 为测试用例生成唯一ID
+// 根据HTTP方法和URL生成ID
+// tc: 测试用例
+// 返回: 唯一ID字符串
 func generateID(tc TestCase) string {
 	base := strings.ToLower(tc.Method) + "_" + strings.ReplaceAll(strings.ToLower(tc.URL), "/", "_")
 	base = regexp.MustCompile(`[^a-z0-9_]`).ReplaceAllString(base, "")
