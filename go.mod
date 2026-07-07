@@ -1,4 +1,4 @@
-module pipet
+module pipetGo
 
 go 1.22
 

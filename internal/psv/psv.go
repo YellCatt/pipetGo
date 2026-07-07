@@ -14,7 +14,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"go.uber.org/zap"
 
-	"pipet/internal/logger"
+	"pipetGo/internal/logger"
 )
 
 // StreamAssert 表示流式断言配置

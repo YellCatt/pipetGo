@@ -4,7 +4,7 @@ package main
 
 import (
 	// cmd 包包含命令行接口的实现
-	"pipet/cmd"
+	"pipetGo/cmd"
 )
 
 // main 函数是程序的入口点

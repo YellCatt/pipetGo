@@ -10,12 +10,12 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"pipet/config"
-	"pipet/internal/httpclient"
-	"pipet/internal/logger"
-	"pipet/internal/psv"
-	"pipet/internal/testcase"
-	"pipet/internal/vars"
+	"pipetGo/config"
+	"pipetGo/internal/httpclient"
+	"pipetGo/internal/logger"
+	"pipetGo/internal/psv"
+	"pipetGo/internal/testcase"
+	"pipetGo/internal/vars"
 )
 
 var (

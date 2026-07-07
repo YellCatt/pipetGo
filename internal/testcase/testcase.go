@@ -7,8 +7,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"pipet/internal/httpclient"
-	"pipet/internal/logger"
+	"pipetGo/internal/httpclient"
+	"pipetGo/internal/logger"
 )
 
 // TestCase 表示一个测试用例

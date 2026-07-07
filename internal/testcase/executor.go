@@ -15,12 +15,12 @@ import (
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 
-	"pipet/config"
-	"pipet/internal/assert"
-	"pipet/internal/httpclient"
-	"pipet/internal/logger"
-	"pipet/internal/psv"
-	"pipet/internal/vars"
+	"pipetGo/config"
+	"pipetGo/internal/assert"
+	"pipetGo/internal/httpclient"
+	"pipetGo/internal/logger"
+	"pipetGo/internal/psv"
+	"pipetGo/internal/vars"
 )
 
 // TestResult 表示测试用例执行结果
