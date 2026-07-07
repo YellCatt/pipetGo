@@ -363,27 +363,14 @@ func FilterByTags(testCases []psv.TestCase, tags []string) []psv.TestCase {
 	return filtered
 }
 
-// RunParallel 并行执行测试用例
+// RunParallel 执行测试用例（串行模式，适用于资源受限设备）
 // testCases: 测试用例列表
 // 返回: 测试结果列表
 func RunParallel(testCases []psv.TestCase) []TestResult {
-	var wg sync.WaitGroup
-	resultChan := make(chan TestResult, len(testCases))
-
-	for _, tc := range testCases {
-		wg.Add(1)
-		go func(tc psv.TestCase) {
-			defer wg.Done()
-			result := ExecuteTestCase(tc)
-			resultChan <- result
-		}(tc)
-	}
-
-	wg.Wait()
-	close(resultChan)
-
 	var results []TestResult
-	for result := range resultChan {
+	
+	for _, tc := range testCases {
+		result := ExecuteTestCase(tc)
 		results = append(results, result)
 	}
 
