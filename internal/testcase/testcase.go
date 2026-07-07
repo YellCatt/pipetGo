@@ -43,35 +43,27 @@ func RunAll() {
 
 	logger.Info("Starting API tests...")
 
-	var wg sync.WaitGroup
-	results := make(chan testResult, len(testCases))
+	var results []testResult
 
 	for _, tc := range testCases {
-		wg.Add(1)
-		go func(tc TestCase) {
-			defer wg.Done()
-			if tc.Skip {
-				logger.Info("Skipping test", zap.String("name", tc.Name), zap.String("reason", tc.SkipReason))
-				results <- testResult{name: tc.Name, skipped: true, skipReason: tc.SkipReason}
-				return
-			}
+		if tc.Skip {
+			logger.Info("Skipping test", zap.String("name", tc.Name), zap.String("reason", tc.SkipReason))
+			results = append(results, testResult{name: tc.Name, skipped: true, skipReason: tc.SkipReason})
+			continue
+		}
 
-			logger.Info("Running test", zap.String("name", tc.Name))
-			err := tc.Run()
-			if err != nil {
-				logger.Error("Test failed", zap.String("name", tc.Name), zap.Error(err))
-				results <- testResult{name: tc.Name, failed: true, err: err}
-			} else {
-				logger.Info("Test passed", zap.String("name", tc.Name))
-				results <- testResult{name: tc.Name, passed: true}
-			}
-		}(tc)
+		logger.Info("Running test", zap.String("name", tc.Name))
+		err := tc.Run()
+		if err != nil {
+			logger.Error("Test failed", zap.String("name", tc.Name), zap.Error(err))
+			results = append(results, testResult{name: tc.Name, failed: true, err: err})
+		} else {
+			logger.Info("Test passed", zap.String("name", tc.Name))
+			results = append(results, testResult{name: tc.Name, passed: true})
+		}
 	}
 
-	wg.Wait()
-	close(results)
-
-	summarize(results)
+	summarizeResults(results)
 }
 
 type testResult struct {
@@ -83,10 +75,10 @@ type testResult struct {
 	err        error
 }
 
-func summarize(results <-chan testResult) {
+func summarizeResults(results []testResult) {
 	var passed, failed, skipped int
 
-	for r := range results {
+	for _, r := range results {
 		if r.passed {
 			passed++
 		} else if r.failed {
