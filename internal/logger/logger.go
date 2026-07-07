@@ -5,30 +5,34 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	"pipet/config"
 )
 
 var log *zap.Logger
 
-func InitLogger() {
+type LogConfig struct {
+	Level    string
+	Encoding string
+	Output   string
+}
+
+func InitLogger(cfg LogConfig) {
 	var zapConfig zap.Config
 
-	switch config.AppConfig.Log.Encoding {
+	switch cfg.Encoding {
 	case "console":
 		zapConfig = zap.NewDevelopmentConfig()
 	default:
 		zapConfig = zap.NewProductionConfig()
 	}
 
-	zapConfig.Level = zap.NewAtomicLevelAt(getLogLevel(config.AppConfig.Log.Level))
-	zapConfig.Encoding = config.AppConfig.Log.Encoding
+	zapConfig.Level = zap.NewAtomicLevelAt(getLogLevel(cfg.Level))
+	zapConfig.Encoding = cfg.Encoding
 
 	var outputPaths []string
-	if config.AppConfig.Log.Output == "stdout" {
+	if cfg.Output == "stdout" {
 		outputPaths = []string{"stdout"}
 	} else {
-		outputPaths = []string{config.AppConfig.Log.Output}
+		outputPaths = []string{cfg.Output}
 	}
 	zapConfig.OutputPaths = outputPaths
 

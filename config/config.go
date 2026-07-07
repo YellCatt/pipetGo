@@ -1,12 +1,10 @@
 package config
 
 import (
+	"log"
 	"strings"
 
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
-
-	"pipet/internal/logger"
 )
 
 var CfgFile string
@@ -48,10 +46,10 @@ func InitConfig() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	if err := viper.ReadInConfig(); err != nil {
-		logger.Fatal("Error reading config file", zap.Error(err))
+		log.Fatalf("Error reading config file: %v", err)
 	}
 
 	if err := viper.Unmarshal(&AppConfig); err != nil {
-		logger.Fatal("Unable to decode config into struct", zap.Error(err))
+		log.Fatalf("Unable to decode config into struct: %v", err)
 	}
 }

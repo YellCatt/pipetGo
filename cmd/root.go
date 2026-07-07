@@ -45,7 +45,11 @@ func init() {
 
 func initConfig() {
 	config.InitConfig()
-	logger.InitLogger()
+	logger.InitLogger(logger.LogConfig{
+		Level:    config.AppConfig.Log.Level,
+		Encoding: config.AppConfig.Log.Encoding,
+		Output:   config.AppConfig.Log.Output,
+	})
 	vars.Set("base_url", config.AppConfig.Target.BaseURL)
 }
 
