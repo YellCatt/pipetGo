@@ -89,15 +89,6 @@ jobs:
           
           gh release create "$VERSION" \
             --title "Development Build $VERSION" \
-            --notes "Automatic build from commit ${{ github.sha }}
-
-**Platforms:**
-- Linux amd64
-- Linux arm64
-- Linux i386
-- Linux mipsle (MT7620A)
-- Windows amd64
-- macOS amd64
-- macOS arm64" \
+            --notes "Automatic build from commit ${{ github.sha }}%0A%0A**Platforms:**%0A- Linux amd64%0A- Linux arm64%0A- Linux i386%0A- Linux mipsle (MT7620A)%0A- Windows amd64%0A- macOS amd64%0A- macOS arm64" \
             --prerelease \
             artifacts/*
