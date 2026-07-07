@@ -25,25 +25,25 @@ import (
 
 // TestResult 表示测试用例执行结果
 type TestResult struct {
-	TestCase      psv.TestCase    // 测试用例
-	Passed        bool            // 是否通过
-	Error         string          // 错误信息
-	Duration      time.Duration   // 执行时长
-	StartTime     time.Time       // 开始时间
-	EndTime       time.Time       // 结束时间
-	ResponseBody  string          // 响应体
-	ActualStatus  int             // 实际状态码
-	RequestHeaders string         // 请求头（JSON格式）
-	RequestBody   string         // 请求体
-	ExtractedVars string         // 提取的变量（JSON格式）
+	TestCase       psv.TestCase  // 测试用例
+	Passed         bool          // 是否通过
+	Error          string        // 错误信息
+	Duration       time.Duration // 执行时长
+	StartTime      time.Time     // 开始时间
+	EndTime        time.Time     // 结束时间
+	ResponseBody   string        // 响应体
+	ActualStatus   int           // 实际状态码
+	RequestHeaders string        // 请求头（JSON格式）
+	RequestBody    string        // 请求体
+	ExtractedVars  string        // 提取的变量（JSON格式）
 }
 
 // 全局变量用于存储测试结果和提取的变量
 var (
-	results      []TestResult           // 测试结果列表
-	resultsMu    sync.Mutex             // 保护 results 的互斥锁
+	results      []TestResult              // 测试结果列表
+	resultsMu    sync.Mutex                // 保护 results 的互斥锁
 	globalVars   = make(map[string]string) // 全局变量存储
-	globalVarsMu sync.Mutex             // 保护 globalVars 的互斥锁
+	globalVarsMu sync.Mutex                // 保护 globalVars 的互斥锁
 )
 
 // ExecuteTestCase 执行单个测试用例
@@ -368,7 +368,7 @@ func FilterByTags(testCases []psv.TestCase, tags []string) []psv.TestCase {
 // 返回: 测试结果列表
 func RunParallel(testCases []psv.TestCase) []TestResult {
 	var results []TestResult
-	
+
 	for _, tc := range testCases {
 		result := ExecuteTestCase(tc)
 		results = append(results, result)
@@ -426,11 +426,14 @@ func GenerateReport(results []TestResult) (string, string) {
 		// 差异信息（错误信息）
 		diff := result.Error
 
+		processedURL := vars.Replace(result.TestCase.URL)
+		processedExpectedBody := vars.Replace(result.TestCase.ExpectedBody)
+
 		line := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%.3f|%d|%d|%s|%s|%s|%s|%s|%s\n",
 			escapePipe(result.TestCase.ID),
 			escapePipe(result.TestCase.Desc),
 			result.TestCase.Method,
-			escapePipe(result.TestCase.URL),
+			escapePipe(processedURL),
 			escapePipe(result.RequestHeaders),
 			escapePipe(result.RequestBody),
 			tags,
@@ -440,7 +443,7 @@ func GenerateReport(results []TestResult) (string, string) {
 			result.ActualStatus,
 			escapePipe(diff),
 			escapePipe(result.ResponseBody),
-			escapePipe(result.TestCase.ExpectedBody),
+			escapePipe(processedExpectedBody),
 			escapePipe(preConditions),
 			escapePipe(postConditions),
 			escapePipe(result.ExtractedVars),
