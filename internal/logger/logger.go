@@ -60,6 +60,7 @@ func InitLogger(cfg LogConfig) {
 
 
 	// 构建日志实例
+	var err error
 	log, err = zapConfig.Build()
 	if err != nil {
 		zap.L().Fatal("Failed to initialize logger", zap.Error(err))
