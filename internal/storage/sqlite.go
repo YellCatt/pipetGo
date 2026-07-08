@@ -47,7 +47,7 @@ func InitDB(dataDir string) error {
 	dbPath := filepath.Join(dataDir, "test_stats.db")
 	logger.Info("数据库路径", zap.String("path", dbPath))
 	
-	db, err = sql.Open("sqlite3", dbPath)
+	db, err = sql.Open("sqlite", dbPath)
 	if err != nil {
 		logger.Error("打开数据库失败", zap.String("path", dbPath), zap.Error(err))
 		return err
