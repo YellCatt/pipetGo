@@ -17,6 +17,8 @@ var db *sql.DB
 
 // InitDB 初始化 SQLite 数据库
 func InitDB(dataDir string) error {
+	var err error
+	
 	// 确保数据目录存在
 	logger.Info("========== 开始初始化 SQLite 数据库 ==========")
 	logger.Info("数据目录参数值", zap.String("dataDir", dataDir))
@@ -28,13 +30,13 @@ func InitDB(dataDir string) error {
 	}
 	
 	logger.Info("正在尝试创建数据目录", zap.String("dataDir", dataDir))
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	if err = os.MkdirAll(dataDir, 0755); err != nil {
 		logger.Error("创建数据目录失败", zap.String("dataDir", dataDir), zap.Error(err))
 		return err
 	}
 	
 	// 验证目录是否真的创建成功
-	_, err := os.Stat(dataDir)
+	_, err = os.Stat(dataDir)
 	if err != nil {
 		logger.Error("验证数据目录失败", zap.String("dataDir", dataDir), zap.Error(err))
 		return err
@@ -44,7 +46,6 @@ func InitDB(dataDir string) error {
 	dbPath := filepath.Join(dataDir, "test_stats.db")
 	logger.Info("数据库路径", zap.String("path", dbPath))
 	
-	var err error
 	db, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
 		logger.Error("打开数据库失败", zap.String("path", dbPath), zap.Error(err))
