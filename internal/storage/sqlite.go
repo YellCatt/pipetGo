@@ -47,11 +47,20 @@ func initDBInternal(dataDir string) error {
 	}
 
 	// 验证目录是否真的创建成功
-	if _, err := os.Stat(dataDir); err != nil {
+	dirInfo, err := os.Stat(dataDir)
+	if err != nil {
 		logger.Error("验证数据目录失败", zap.String("dataDir", dataDir), zap.Error(err))
 		return err
 	}
-	logger.Info("数据目录创建成功并验证通过", zap.String("dataDir", dataDir))
+	logger.Info("数据目录创建成功并验证通过", zap.String("dataDir", dataDir), zap.String("dirMode", dirInfo.Mode().String()))
+
+	// 检查当前工作目录
+	cwd, err := os.Getwd()
+	if err != nil {
+		logger.Warn("获取当前工作目录失败", zap.Error(err))
+	} else {
+		logger.Info("当前工作目录", zap.String("cwd", cwd))
+	}
 
 	dbPath := filepath.Join(dataDir, "test_stats.db")
 	absPath, err := filepath.Abs(dbPath)
@@ -59,28 +68,41 @@ func initDBInternal(dataDir string) error {
 		logger.Error("获取数据库绝对路径失败", zap.String("path", dbPath), zap.Error(err))
 		return err
 	}
-	logger.Info("数据库路径", zap.String("path", absPath))
+	logger.Info("数据库相对路径", zap.String("relativePath", dbPath))
+	logger.Info("数据库绝对路径", zap.String("absPath", absPath))
 
-	db, err = sql.Open("sqlite3", absPath)
+	// 构建 SQLite 连接字符串
+	dbDSN := "file:" + absPath + "?_journal_mode=WAL&_timeout=5000"
+	logger.Info("SQLite 连接字符串", zap.String("dsn", dbDSN))
+
+	db, err = sql.Open("sqlite3", dbDSN)
 	if err != nil {
-		logger.Error("打开数据库失败", zap.String("path", absPath), zap.Error(err))
+		logger.Error("打开数据库失败", zap.String("dsn", dbDSN), zap.Error(err))
 		return err
 	}
-	logger.Info("数据库连接打开成功", zap.String("path", absPath))
+	logger.Info("数据库连接对象创建成功", zap.String("dsn", dbDSN))
+
+	// 设置连接池参数
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0)
+	logger.Info("数据库连接池参数已设置", zap.Int("maxOpenConns", 1), zap.Int("maxIdleConns", 1))
 
 	// 检查数据库文件是否存在
 	if _, err := os.Stat(absPath); err == nil {
-		logger.Info("数据库文件已存在", zap.String("path", absPath))
+		fileInfo, _ := os.Stat(absPath)
+		logger.Info("数据库文件已存在", zap.String("path", absPath), zap.Int64("sizeBytes", fileInfo.Size()), zap.String("mode", fileInfo.Mode().String()))
 	} else {
 		logger.Warn("数据库文件不存在，将创建新文件", zap.String("path", absPath))
 	}
 
 	// 验证数据库连接
+	logger.Info("正在测试数据库连接...")
 	if err := db.Ping(); err != nil {
-		logger.Error("数据库连接测试失败", zap.String("path", absPath), zap.Error(err))
+		logger.Error("数据库连接测试失败", zap.String("dsn", dbDSN), zap.Error(err))
 		return err
 	}
-	logger.Info("数据库连接测试成功", zap.String("path", absPath))
+	logger.Info("数据库连接测试成功", zap.String("dsn", dbDSN))
 
 	// 创建测试执行时间记录表
 	createTableSQL := `CREATE TABLE IF NOT EXISTS test_execution_times (
