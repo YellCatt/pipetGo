@@ -493,9 +493,13 @@ func escapePipe(s string) string {
 // allReport: 全部报告内容
 // errorReport: 错误报告内容
 // 返回: 全部报告路径, 错误报告路径
-func SaveReports(allReport, errorReport string) (string, string) {
-	// 使用东八区（UTC+8）时间
-	timestamp := timeutil.FormatCompact(timeutil.Now())
+func SaveReports(allReport, errorReport string, timestamp ...string) (string, string) {
+	// 如果没有提供时间戳，使用当前时间
+	ts := timeutil.FormatCompact(timeutil.Now())
+	if len(timestamp) > 0 && timestamp[0] != "" {
+		ts = timestamp[0]
+	}
+	
 	reportDir := config.AppConfig.Test.ReportDir
 
 
@@ -506,7 +510,7 @@ func SaveReports(allReport, errorReport string) (string, string) {
 	}
 
 	// 保存全部报告
-	allPath := fmt.Sprintf("%s/report_%s.psv", reportDir, timestamp)
+	allPath := fmt.Sprintf("%s/report_%s.psv", reportDir, ts)
 	if err := os.WriteFile(allPath, []byte(allReport), 0644); err != nil {
 		logger.Error("Failed to save report", zap.Error(err))
 	}
@@ -514,7 +518,7 @@ func SaveReports(allReport, errorReport string) (string, string) {
 	// 保存错误报告（如果有失败的测试）
 	var errorPath string
 	if errorReport != "" {
-		errorPath = fmt.Sprintf("%s/report_%s_error.psv", reportDir, timestamp)
+		errorPath = fmt.Sprintf("%s/report_%s_error.psv", reportDir, ts)
 		if err := os.WriteFile(errorPath, []byte(errorReport), 0644); err != nil {
 			logger.Error("Failed to save error report", zap.Error(err))
 		}

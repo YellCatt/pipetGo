@@ -154,21 +154,33 @@ func runTests(paths []string) {
 		}
 	}()
 
-	// 运行测试（串行执行）
-	results := testcase.RunParallel(testCases)
+	// 生成报告时间戳（测试开始时生成，后续更新报告时使用同一个时间戳）
+	reportTimestamp := timeutil.FormatCompact(timeutil.Now())
 
-	// 打印测试摘要
-	testcase.PrintSummary(results)
+	// 运行测试（串行执行），每完成一个测试就更新一次报告
+	var results []testcase.TestResult
+	for i, tc := range testCases {
+		result := testcase.ExecuteTestCase(tc)
+		results = append(results, result)
 
-	// 生成并保存测试报告
-	allReport, errorReport := testcase.GenerateReport(results)
-	allPath, errorPath := testcase.SaveReports(allReport, errorReport)
+		// 每完成一个测试用例就更新一次报告（覆盖同一个文件）
+		fmt.Printf("\n\n────────────────────────────────────────────────────────────\n")
+		fmt.Printf("第 %d/%d 个测试完成，正在更新报告...\n", i+1, len(testCases))
+		fmt.Printf("────────────────────────────────────────────────────────────\n")
 
-	// 输出报告路径
-	fmt.Printf("\nPSV 报告已保存: %s\n", allPath)
-	if errorPath != "" {
-		fmt.Printf("异常用例 PSV 报告已保存: %s\n", errorPath)
+		// 生成并保存测试报告（使用同一个时间戳，覆盖之前的报告）
+		allReport, errorReport := testcase.GenerateReport(results)
+		allPath, errorPath := testcase.SaveReports(allReport, errorReport, reportTimestamp)
+
+		// 输出报告路径
+		fmt.Printf("\nPSV 报告已保存: %s\n", allPath)
+		if errorPath != "" {
+			fmt.Printf("异常用例 PSV 报告已保存: %s\n", errorPath)
+		}
 	}
+
+	// 打印最终测试摘要
+	testcase.PrintSummary(results)
 
 	// 如果有失败的测试用例，退出码设为 1
 	failedCount := 0
