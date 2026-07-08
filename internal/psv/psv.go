@@ -4,6 +4,7 @@ package psv
 
 import (
 	"bufio"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -168,38 +169,34 @@ func parseReader(reader io.Reader, filePath string) ([]TestCase, error) {
 	return testCases, nil
 }
 
-// parseLine 解析单行PSV内容
-// 支持引号内包含管道符的情况
+// parseLine 解析单行 PSV 内容
+// 使用 encoding/csv 正确处理带引号的字段，避免 JSON 内部的双引号被误删
 // line: 单行文本
 // 返回: 字段数组
 func parseLine(line string) []string {
-	var fields []string
-	var current strings.Builder
-	inQuotes := false
+	// 去掉 Windows 换行残留的 \r
+	line = strings.TrimSuffix(line, "\r")
 
-	for _, char := range line {
-		switch char {
-		case '"':
-			inQuotes = !inQuotes
-		case '|':
-			if !inQuotes {
-				fields = append(fields, current.String())
-				current.Reset()
-				continue
-			}
-			current.WriteRune(char)
-		default:
-			current.WriteRune(char)
+	r := csv.NewReader(strings.NewReader(line))
+	r.Comma = '|'
+	r.LazyQuotes = true
+	r.FieldsPerRecord = -1
+	r.TrimLeadingSpace = true
+
+	records, err := r.Read()
+	if err != nil {
+		// 退化方案：直接按管道符分割
+		fields := strings.Split(line, "|")
+		for i := range fields {
+			fields[i] = strings.TrimSpace(fields[i])
 		}
-	}
-	fields = append(fields, current.String())
-
-	// 去除字段两端的空格（保留内部内容不变）
-	for i, f := range fields {
-		fields[i] = strings.TrimSpace(f)
+		return fields
 	}
 
-	return fields
+	for i := range records {
+		records[i] = strings.TrimSpace(records[i])
+	}
+	return records
 }
 
 // parseTestCase 将字段解析为测试用例
