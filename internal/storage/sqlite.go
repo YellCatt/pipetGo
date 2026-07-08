@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -13,10 +14,22 @@ import (
 	"pipetGo/internal/logger"
 )
 
-var db *sql.DB
+var (
+	db   *sql.DB
+	once sync.Once
+)
 
-// InitDB 初始化 SQLite 数据库
+// InitDB 初始化 SQLite 数据库（单例模式，确保全局只初始化一次）
 func InitDB(dataDir string) error {
+	var initErr error
+	once.Do(func() {
+		initErr = initDBInternal(dataDir)
+	})
+	return initErr
+}
+
+// initDBInternal 实际的数据库初始化逻辑
+func initDBInternal(dataDir string) error {
 	logger.Info("========== 开始初始化 SQLite 数据库 ==========")
 	logger.Info("数据目录参数值", zap.String("dataDir", dataDir))
 	logger.Info("数据目录参数是否为空", zap.Bool("isEmpty", dataDir == ""))
@@ -54,7 +67,7 @@ func InitDB(dataDir string) error {
 		return err
 	}
 	logger.Info("数据库连接打开成功", zap.String("path", absPath))
-	
+
 	// 检查数据库文件是否存在
 	if _, err := os.Stat(absPath); err == nil {
 		logger.Info("数据库文件已存在", zap.String("path", absPath))
@@ -185,7 +198,7 @@ func GetAllAverageDurations() (map[string]time.Duration, error) {
 	}
 
 	logger.Info("GetAllAverageDurations: found", zap.Int("count", len(averages)), zap.Any("averages", averages))
-	
+
 	if len(averages) == 0 {
 		logger.Warn("GetAllAverageDurations: no historical data found")
 	}
@@ -260,10 +273,10 @@ func CalculateAndStoreAverages() error {
 			return err
 		}
 
-		logger.Info("Stored average duration", 
-			zap.String("test_case_id", testCaseID), 
+		logger.Info("Stored average duration",
+			zap.String("test_case_id", testCaseID),
 			zap.String("file_name", fileName),
-			zap.String("url", url), 
+			zap.String("url", url),
 			zap.Float64("avg_ms", avgMs),
 			zap.Int("count", count))
 	}
