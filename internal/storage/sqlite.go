@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/crawshaw/sqlite"
 	"go.uber.org/zap"
 
 	"pipetGo/internal/logger"
