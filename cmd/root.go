@@ -82,8 +82,11 @@ func runTests(paths []string) {
 	httpclient.InitClient()
 
 	// 初始化 SQLite 数据库
+	logger.Info("准备初始化 SQLite 数据库", zap.String("DataDir", config.AppConfig.Test.DataDir))
 	if err := storage.InitDB(config.AppConfig.Test.DataDir); err != nil {
-		logger.Warn("Failed to initialize SQLite database", zap.Error(err))
+		logger.Warn("SQLite 数据库初始化失败", zap.Error(err))
+	} else {
+		logger.Info("SQLite 数据库初始化成功")
 	}
 
 	// 如果未指定路径，使用默认测试用例目录

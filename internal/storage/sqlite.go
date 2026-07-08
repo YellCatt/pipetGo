@@ -18,16 +18,46 @@ var db *sql.DB
 // InitDB 初始化 SQLite 数据库
 func InitDB(dataDir string) error {
 	// 确保数据目录存在
+	logger.Info("========== 开始初始化 SQLite 数据库 ==========")
+	logger.Info("数据目录参数值", zap.String("dataDir", dataDir))
+	logger.Info("数据目录参数是否为空", zap.Bool("isEmpty", dataDir == ""))
+	
+	if dataDir == "" {
+		logger.Error("数据目录为空，无法创建数据库")
+		return fmt.Errorf("数据目录为空")
+	}
+	
+	logger.Info("正在尝试创建数据目录", zap.String("dataDir", dataDir))
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		logger.Error("创建数据目录失败", zap.String("dataDir", dataDir), zap.Error(err))
 		return err
 	}
+	
+	// 验证目录是否真的创建成功
+	_, err := os.Stat(dataDir)
+	if err != nil {
+		logger.Error("验证数据目录失败", zap.String("dataDir", dataDir), zap.Error(err))
+		return err
+	}
+	logger.Info("数据目录创建成功并验证通过", zap.String("dataDir", dataDir))
 
 	dbPath := filepath.Join(dataDir, "test_stats.db")
+	logger.Info("数据库路径", zap.String("path", dbPath))
+	
 	var err error
 	db, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
+		logger.Error("打开数据库失败", zap.String("path", dbPath), zap.Error(err))
 		return err
 	}
+	logger.Info("数据库连接打开成功", zap.String("path", dbPath))
+
+	// 验证数据库连接
+	if err := db.Ping(); err != nil {
+		logger.Error("数据库连接测试失败", zap.String("path", dbPath), zap.Error(err))
+		return err
+	}
+	logger.Info("数据库连接测试成功", zap.String("path", dbPath))
 
 	// 创建测试执行时间记录表
 	createTableSQL := `
@@ -42,12 +72,15 @@ func InitDB(dataDir string) error {
 	CREATE INDEX IF NOT EXISTS idx_test_execution_times_url ON test_execution_times(url);
 	`
 
+	logger.Info("正在创建表（如果不存在）")
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
+		logger.Error("创建表失败", zap.Error(err))
 		return err
 	}
+	logger.Info("表创建成功或已存在")
 
-	logger.Info("SQLite database initialized", zap.String("path", dbPath))
+	logger.Info("SQLite 数据库初始化成功", zap.String("path", dbPath))
 	return nil
 }
 
