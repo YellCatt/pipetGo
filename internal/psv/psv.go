@@ -29,6 +29,7 @@ type StreamAssert struct {
 type TestCase struct {
 	ID             string            `mapstructure:"id"`              // 测试用例唯一标识
 	Name           string            `mapstructure:"name"`            // 测试用例名称
+	FileName       string            `mapstructure:"file_name"`       // 所属文件名（用于数据库记录）
 	Skip           bool              `mapstructure:"skip"`            // 是否跳过
 	SkipReason     string            `mapstructure:"skip_reason"`     // 跳过原因
 	Desc           string            `mapstructure:"desc"`            // 测试用例描述
@@ -130,6 +131,8 @@ func parseReader(reader io.Reader, filePath string) ([]TestCase, error) {
 	var header []string
 	lineNum := 0
 
+	fileName := filepath.Base(filePath)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		lineNum++
@@ -151,6 +154,7 @@ func parseReader(reader io.Reader, filePath string) ([]TestCase, error) {
 			logger.Warn("Failed to parse test case", zap.String("file", filePath), zap.Int("line", lineNum), zap.Error(err))
 			continue
 		}
+		tc.FileName = fileName
 		testCases = append(testCases, tc)
 	}
 

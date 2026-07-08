@@ -186,6 +186,13 @@ func runTests(paths []string) {
 	// 打印最终测试摘要
 	testcase.PrintSummary(results)
 
+	// 测试结束后计算并存储所有成功测试用例的平均执行时间
+	if err := storage.CalculateAndStoreAverages(); err != nil {
+		logger.Warn("Failed to calculate and store average durations", zap.Error(err))
+	} else {
+		logger.Info("Successfully calculated and stored average durations")
+	}
+
 	// 如果有失败的测试用例，退出码设为 1
 	failedCount := 0
 	for _, r := range results {

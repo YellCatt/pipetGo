@@ -85,20 +85,45 @@ func InitDB(dataDir string) error {
 		return err
 	}
 
+	// 创建平均执行时间表
+	createAvgTableSQL := `CREATE TABLE IF NOT EXISTS test_average_times (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		test_case_id TEXT NOT NULL,
+		test_case_desc TEXT,
+		url TEXT NOT NULL,
+		average_duration_ms REAL NOT NULL,
+		execution_count INTEGER NOT NULL,
+		last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(test_case_id, url)
+	);`
+
+	logger.Info("正在创建平均时间表（如果不存在）")
+	if _, err := db.Exec(createAvgTableSQL); err != nil {
+		logger.Error("创建平均时间表失败", zap.Error(err))
+		return err
+	}
+
+	createAvgIndexSQL := `CREATE INDEX IF NOT EXISTS idx_test_average_times_test_case_id ON test_average_times(test_case_id);`
+	if _, err := db.Exec(createAvgIndexSQL); err != nil {
+		logger.Error("创建平均时间索引失败", zap.Error(err))
+		return err
+	}
+
 	logger.Info("表创建成功或已存在")
 	logger.Info("SQLite 数据库初始化成功", zap.String("path", absPath))
 	return nil
 }
 
 // RecordExecutionTime 记录测试执行时间
-func RecordExecutionTime(testCaseID, testCaseDesc, url string, duration time.Duration, success bool) error {
+func RecordExecutionTime(testCaseID, testCaseDesc, fileName, url string, duration time.Duration, success bool) error {
 	if db == nil {
 		return fmt.Errorf("database not initialized")
 	}
 
-	_, err := db.Exec("INSERT INTO test_execution_times (test_case_id, test_case_desc, url, duration_ms, success, executed_at) VALUES (?, ?, ?, ?, ?, ?)",
+	_, err := db.Exec("INSERT INTO test_execution_times (test_case_id, test_case_desc, file_name, url, duration_ms, success, executed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
 		testCaseID,
 		testCaseDesc,
+		fileName,
 		url,
 		int64(duration/time.Millisecond),
 		success,
@@ -165,4 +190,91 @@ func GetExecutionCount(url string) (int, error) {
 	}
 
 	return count, nil
+}
+
+// CalculateAndStoreAverages 计算所有成功测试用例的平均执行时间并存储到数据库
+func CalculateAndStoreAverages() error {
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	rows, err := db.Query(`
+		SELECT test_case_id, test_case_desc, file_name, url, AVG(duration_ms) as avg_ms, COUNT(*) as count
+		FROM test_execution_times 
+		WHERE success = 1 
+		GROUP BY test_case_id, file_name, url
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var testCaseID, testCaseDesc, fileName, url string
+		var avgMs float64
+		var count int
+
+		if err := rows.Scan(&testCaseID, &testCaseDesc, &fileName, &url, &avgMs, &count); err != nil {
+			return err
+		}
+
+		_, err := db.Exec(`
+			INSERT OR REPLACE INTO test_average_times 
+			(test_case_id, test_case_desc, file_name, url, average_duration_ms, execution_count, last_updated)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, testCaseID, testCaseDesc, fileName, url, avgMs, count, time.Now().Format("2006-01-02 15:04:05"))
+
+		if err != nil {
+			logger.Error("Failed to store average duration", zap.String("test_case_id", testCaseID), zap.Error(err))
+			return err
+		}
+
+		logger.Info("Stored average duration", 
+			zap.String("test_case_id", testCaseID), 
+			zap.String("file_name", fileName),
+			zap.String("url", url), 
+			zap.Float64("avg_ms", avgMs),
+			zap.Int("count", count))
+	}
+
+	return nil
+}
+
+// GetAllStoredAverages 获取所有已存储的平均执行时间
+func GetAllStoredAverages() ([]map[string]interface{}, error) {
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	rows, err := db.Query(`
+		SELECT test_case_id, test_case_desc, file_name, url, average_duration_ms, execution_count, last_updated
+		FROM test_average_times
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var averages []map[string]interface{}
+	for rows.Next() {
+		var testCaseID, testCaseDesc, fileName, url, lastUpdated string
+		var avgMs float64
+		var count int
+
+		if err := rows.Scan(&testCaseID, &testCaseDesc, &fileName, &url, &avgMs, &count, &lastUpdated); err != nil {
+			return nil, err
+		}
+
+		averages = append(averages, map[string]interface{}{
+			"test_case_id":        testCaseID,
+			"test_case_desc":      testCaseDesc,
+			"file_name":           fileName,
+			"url":                 url,
+			"average_duration_ms": avgMs,
+			"execution_count":     count,
+			"last_updated":        lastUpdated,
+		})
+	}
+
+	return averages, nil
 }
