@@ -10,9 +10,12 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"pipetGo/internal/timeutil"
 )
 
 // log 是全局日志实例
+
 var log *zap.Logger
 
 // LogConfig 表示日志配置
@@ -51,14 +54,10 @@ func InitLogger(cfg LogConfig) {
 	zapConfig.OutputPaths = outputPaths
 
 	// 设置时间格式（东八区）
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		// 如果无法加载时区，使用UTC作为备用
-		loc = time.UTC
-	}
 	zapConfig.EncoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-		enc.AppendString(t.In(loc).Format("2006-01-02 15:04:05.000"))
+		enc.AppendString(timeutil.FormatDateTimeMs(t))
 	}
+
 
 	// 构建日志实例
 	log, err = zapConfig.Build()
@@ -81,14 +80,11 @@ func addTimestampToFilename(path string) string {
 	ext := filepath.Ext(filename)
 	nameWithoutExt := strings.TrimSuffix(filename, ext)
 
-	// 使用东八区时间，加载失败时使用 UTC
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.UTC
-	}
-	timestamp := time.Now().In(loc).Format("20060102_150405")
+	// 使用东八区时间
+	timestamp := timeutil.FormatCompact(timeutil.Now())
 
 	return filepath.Join(dir, nameWithoutExt+"_"+timestamp+ext)
+
 }
 
 // ensureDir 确保日志目录存在

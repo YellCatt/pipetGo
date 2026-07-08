@@ -7,13 +7,14 @@ import (
 	"log"
 	"net/smtp"
 	"strings"
-	"time"
 
 	"pipetGo/internal/testcase"
+	"pipetGo/internal/timeutil"
 )
 
 type EmailConfig struct {
 	FromEmail  string
+
 	ToEmail    string
 	AuthCode   string
 	SMTPServer string
@@ -113,17 +114,14 @@ func SendEmail(subject, body string) error {
 func GenerateTestReportContent(results []testcase.TestResult) string {
 	var sb strings.Builder
 
-	// 使用东八区时间，加载失败时使用 UTC
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.UTC
-	}
-	now := time.Now().In(loc)
+	// 使用东八区时间
+	now := timeutil.Now()
 
 	sb.WriteString(fmt.Sprintf("===== 测试报告 =====\n\n"))
-	sb.WriteString(fmt.Sprintf("执行时间: %s\n", now.Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(now)))
 
 	var passed, failed, skipped int
+
 	var totalDuration time.Duration
 
 	for _, r := range results {
@@ -187,12 +185,9 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 		return nil
 	}
 
-	// 使用东八区时间，加载失败时使用 UTC
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.UTC
-	}
-	subject := fmt.Sprintf("【测试报告】pipetGo - %s", time.Now().In(loc).Format("2006-01-02 15:04"))
+	// 使用东八区时间
+	subject := fmt.Sprintf("【测试报告】pipetGo - %s", timeutil.FormatDateTime(timeutil.Now()))
+
 	body := GenerateTestReportContent(results)
 
 	log.Println("发送测试报告邮件...")

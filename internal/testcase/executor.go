@@ -20,8 +20,10 @@ import (
 	"pipetGo/internal/httpclient"
 	"pipetGo/internal/logger"
 	"pipetGo/internal/psv"
+	"pipetGo/internal/timeutil"
 	"pipetGo/internal/vars"
 )
+
 
 // TestResult 表示测试用例执行结果
 type TestResult struct {
@@ -50,7 +52,8 @@ var (
 // tc: 测试用例
 // 返回: 测试结果
 func ExecuteTestCase(tc psv.TestCase) TestResult {
-	startTime := time.Now()
+	startTime := timeutil.Now()
+
 	result := TestResult{
 		TestCase:  tc,
 		StartTime: startTime,
@@ -62,10 +65,11 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	if tc.Skip {
 		logger.Info("Skipping test", zap.String("id", tc.ID))
 		result.Passed = true
-		result.EndTime = time.Now()
+		result.EndTime = timeutil.Now()
 		result.Duration = result.EndTime.Sub(startTime)
 		return result
 	}
+
 
 	// 变量替换：将 {{var}} 替换为实际值
 	processedURL := vars.Replace(tc.URL)
@@ -169,11 +173,12 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	if err != nil {
 		result.Error = err.Error()
 		result.Passed = false
-		result.EndTime = time.Now()
+		result.EndTime = timeutil.Now()
 		result.Duration = result.EndTime.Sub(startTime)
 		logger.Error("Test failed", zap.String("id", tc.ID), zap.Error(err))
 		return result
 	}
+
 
 	result.ResponseBody = string(resp.Body())
 	result.ActualStatus = resp.StatusCode()
@@ -186,35 +191,38 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		if tc.ExpectedStatus > 0 && resp.StatusCode() != tc.ExpectedStatus {
 			result.Error = fmt.Sprintf("expected status %d, got %d", tc.ExpectedStatus, resp.StatusCode())
 			result.Passed = false
-			result.EndTime = time.Now()
+			result.EndTime = timeutil.Now()
 			result.Duration = result.EndTime.Sub(startTime)
 			logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
 			return result
 		}
+
 
 		// 正则表达式断言
 		if tc.BodyRegex != "" {
 			if ok, errMsg := assert.BodyRegexMatch(result.ResponseBody, tc.BodyRegex); !ok {
 				result.Error = errMsg
 				result.Passed = false
-				result.EndTime = time.Now()
+				result.EndTime = timeutil.Now()
 				result.Duration = result.EndTime.Sub(startTime)
 				logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
 				return result
 			}
 		}
 
+
 		// JSON 响应体断言
 		if tc.ExpectedBody != "" {
 			if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), result.ResponseBody, tc.MatchMode); !ok {
 				result.Error = errMsg
 				result.Passed = false
-				result.EndTime = time.Now()
+				result.EndTime = timeutil.Now()
 				result.Duration = result.EndTime.Sub(startTime)
 				logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
 				return result
 			}
 		}
+
 	}
 
 	// 提取变量（用于链式测试）
@@ -236,12 +244,13 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 
 	// 测试通过
 	result.Passed = true
-	result.EndTime = time.Now()
+	result.EndTime = timeutil.Now()
 	result.Duration = result.EndTime.Sub(startTime)
 	logger.Info("Test passed", zap.String("id", tc.ID), zap.Duration("duration", result.Duration))
 
 	return result
 }
+
 
 // hasFileField 检查表单是否包含文件上传字段
 // form: 表单数据
@@ -308,11 +317,12 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 
 		if ok, _ := assert.StreamAssert(aggregatedContent.String(), chunkCount, assertConfigs); ok {
 			result.Passed = true
-			result.EndTime = time.Now()
+			result.EndTime = timeutil.Now()
 			result.Duration = result.EndTime.Sub(startTime)
 			logger.Info("Stream assertion passed", zap.String("id", tc.ID))
 			return result
 		}
+
 	}
 
 	// 构建聚合结果
@@ -324,17 +334,18 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 		if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), aggregatedResult, tc.MatchMode); !ok {
 			result.Error = errMsg
 			result.Passed = false
-			result.EndTime = time.Now()
+			result.EndTime = timeutil.Now()
 			result.Duration = result.EndTime.Sub(startTime)
 			return result
 		}
 	}
 
 	result.Passed = true
-	result.EndTime = time.Now()
+	result.EndTime = timeutil.Now()
 	result.Duration = result.EndTime.Sub(startTime)
 	return result
 }
+
 
 // FilterByTags 根据标签过滤测试用例
 // testCases: 测试用例列表
@@ -400,8 +411,8 @@ func GenerateReport(results []TestResult) (string, string) {
 	var allReport strings.Builder
 	var errorReport strings.Builder
 
-	// 使用新的报告格式
-	header := "id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars\n"
+	// 使用新的报告格式（添加东八区时间字段）
+	header := "id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars|start_time|end_time\n"
 	allReport.WriteString(header)
 	errorReport.WriteString(header)
 
@@ -429,7 +440,12 @@ func GenerateReport(results []TestResult) (string, string) {
 		processedURL := vars.Replace(result.TestCase.URL)
 		processedExpectedBody := vars.Replace(result.TestCase.ExpectedBody)
 
-		line := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%.3f|%d|%d|%s|%s|%s|%s|%s|%s\n",
+	// 格式化东八区时间
+	startTime := timeutil.FormatDateTime(result.StartTime)
+	endTime := timeutil.FormatDateTime(result.EndTime)
+
+
+		line := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%.3f|%d|%d|%s|%s|%s|%s|%s|%s|%s|%s\n",
 			escapePipe(result.TestCase.ID),
 			escapePipe(result.TestCase.Desc),
 			result.TestCase.Method,
@@ -447,6 +463,8 @@ func GenerateReport(results []TestResult) (string, string) {
 			escapePipe(preConditions),
 			escapePipe(postConditions),
 			escapePipe(result.ExtractedVars),
+			startTime,
+			endTime,
 		)
 		allReport.WriteString(line)
 
@@ -467,12 +485,15 @@ func escapePipe(s string) string {
 }
 
 // SaveReports 保存测试报告到文件
+
 // allReport: 全部报告内容
 // errorReport: 错误报告内容
 // 返回: 全部报告路径, 错误报告路径
 func SaveReports(allReport, errorReport string) (string, string) {
-	timestamp := time.Now().Format("20060102_150405")
+	// 使用东八区（UTC+8）时间
+	timestamp := timeutil.FormatCompact(timeutil.Now())
 	reportDir := config.AppConfig.Test.ReportDir
+
 
 	// 创建报告目录
 	if err := os.MkdirAll(reportDir, 0755); err != nil {
