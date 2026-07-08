@@ -80,7 +80,8 @@ func initConfig() {
 		FromEmail:  config.AppConfig.Email.From,
 		ToEmail:    config.AppConfig.Email.To,
 		AuthCode:   config.AppConfig.Email.AuthCode,
-		SMTPServer: config.AppConfig.Email.SMTPPort,
+		SMTPServer: config.AppConfig.Email.SMTPServer,
+		SMTPPort:   config.AppConfig.Email.SMTPPort,
 	})
 }
 
