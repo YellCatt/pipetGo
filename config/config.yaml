@@ -12,6 +12,9 @@ test:
   test_case_dir: "./testcases"
   data_dir: "./sql"
 
+http:
+  insecure_skip_verify: true
+
 email:
   from: "768305875@qq.com"
   to: "768305875@qq.com"

@@ -17,7 +17,13 @@ type Config struct {
 	Target TargetConfig `mapstructure:"target"` // 目标 API 配置
 	Log    LogConfig    `mapstructure:"log"`    // 日志配置
 	Test   TestConfig   `mapstructure:"test"`   // 测试配置
+	HTTP   HTTPConfig   `mapstructure:"http"`   // HTTP 客户端配置
 	Email  EmailConfig  `mapstructure:"email"`  // 邮件配置
+}
+
+// HTTPConfig 表示 HTTP 客户端的配置
+type HTTPConfig struct {
+	InsecureSkipVerify bool `mapstructure:"insecure_skip_verify"` // 是否跳过 TLS 证书验证
 }
 
 // TargetConfig 表示目标 API 的配置
