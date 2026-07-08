@@ -444,18 +444,20 @@ func GenerateReport(results []TestResult) (string, string) {
 	var allReport strings.Builder
 	var errorReport strings.Builder
 
-	// 使用新的报告格式（添加东八区时间字段）
-	header := "id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars|start_time|end_time\n"
+	// 使用新的报告格式（status放在最前面，简化状态表示）
+	header := "status|id|desc|method|url|request_headers|request_body|tags|duration_s|expect_status|actual_status|diff|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars|start_time|end_time\n"
 	allReport.WriteString(header)
-	errorReport.WriteString(header)
+
+	// 先收集失败的测试用例行
+	var failedLines []string
 
 	for _, result := range results {
-		// 确定测试状态
-		status := "PASS"
+		// 确定测试状态（简化表示：P=通过，F=失败，S=跳过）
+		status := "P"
 		if result.TestCase.Skip {
-			status = "SKIP"
+			status = "S"
 		} else if !result.Passed {
-			status = "FAIL"
+			status = "F"
 		}
 
 		// 标签列表转字符串
@@ -478,6 +480,7 @@ func GenerateReport(results []TestResult) (string, string) {
 		endTime := timeutil.FormatDateTime(result.EndTime)
 
 		line := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%.3f|%d|%d|%s|%s|%s|%s|%s|%s|%s|%s\n",
+			status,
 			escapePipe(result.TestCase.ID),
 			escapePipe(result.TestCase.Desc),
 			result.TestCase.Method,
@@ -485,7 +488,6 @@ func GenerateReport(results []TestResult) (string, string) {
 			escapePipe(result.RequestHeaders),
 			escapePipe(result.RequestBody),
 			tags,
-			status,
 			result.Duration.Seconds(),
 			result.TestCase.ExpectedStatus,
 			result.ActualStatus,
@@ -500,8 +502,16 @@ func GenerateReport(results []TestResult) (string, string) {
 		)
 		allReport.WriteString(line)
 
-		// 错误报告只包含失败的测试用例
+		// 收集失败的测试用例行
 		if !result.Passed && !result.TestCase.Skip {
+			failedLines = append(failedLines, line)
+		}
+	}
+
+	// 只有当有失败的测试用例时才生成错误报告
+	if len(failedLines) > 0 {
+		errorReport.WriteString(header)
+		for _, line := range failedLines {
 			errorReport.WriteString(line)
 		}
 	}
