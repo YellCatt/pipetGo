@@ -65,6 +65,8 @@ func InitDB(dataDir string) error {
 	// 创建测试执行时间记录表
 	createTableSQL := `CREATE TABLE IF NOT EXISTS test_execution_times (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		test_case_id TEXT NOT NULL,
+		test_case_desc TEXT,
 		url TEXT NOT NULL,
 		duration_ms INTEGER NOT NULL,
 		success BOOLEAN NOT NULL,
@@ -77,7 +79,7 @@ func InitDB(dataDir string) error {
 		return err
 	}
 
-	createIndexSQL := `CREATE INDEX IF NOT EXISTS idx_test_execution_times_url ON test_execution_times(url);`
+	createIndexSQL := `CREATE INDEX IF NOT EXISTS idx_test_execution_times_test_case_id ON test_execution_times(test_case_id);`
 	if _, err := db.Exec(createIndexSQL); err != nil {
 		logger.Error("创建索引失败", zap.Error(err))
 		return err
@@ -89,12 +91,14 @@ func InitDB(dataDir string) error {
 }
 
 // RecordExecutionTime 记录测试执行时间
-func RecordExecutionTime(url string, duration time.Duration, success bool) error {
+func RecordExecutionTime(testCaseID, testCaseDesc, url string, duration time.Duration, success bool) error {
 	if db == nil {
 		return fmt.Errorf("database not initialized")
 	}
 
-	_, err := db.Exec("INSERT INTO test_execution_times (url, duration_ms, success, executed_at) VALUES (?, ?, ?, ?)",
+	_, err := db.Exec("INSERT INTO test_execution_times (test_case_id, test_case_desc, url, duration_ms, success, executed_at) VALUES (?, ?, ?, ?, ?, ?)",
+		testCaseID,
+		testCaseDesc,
 		url,
 		int64(duration/time.Millisecond),
 		success,

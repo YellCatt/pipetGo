@@ -262,7 +262,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 
 	// 记录成功的执行时间到数据库
-	go storage.RecordExecutionTime(vars.Replace(tc.URL), result.Duration, true)
+	go storage.RecordExecutionTime(tc.ID, tc.Desc, vars.Replace(tc.URL), result.Duration, true)
 
 	return result
 }
