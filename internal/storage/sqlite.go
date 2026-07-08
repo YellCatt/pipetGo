@@ -1,20 +1,19 @@
 package storage
 
 import (
-	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"crawshaw.io/sqlite"
-	"crawshaw.io/sqlite/sqlitex"
+	_ "modernc.org/sqlite"
 	"go.uber.org/zap"
 
 	"pipetGo/internal/logger"
 )
 
-var dbpool *sqlitex.Pool
+var db *sql.DB
 
 // InitDB 初始化 SQLite 数据库
 func InitDB(dataDir string) error {
@@ -49,16 +48,19 @@ func InitDB(dataDir string) error {
 	}
 	logger.Info("数据库路径", zap.String("path", absPath))
 
-	dbURI := "file:" + filepath.ToSlash(absPath)
-	dbpool, err = sqlitex.Open(dbURI, 0, 10)
+	db, err = sql.Open("sqlite3", absPath)
 	if err != nil {
 		logger.Error("打开数据库失败", zap.String("path", absPath), zap.Error(err))
 		return err
 	}
 	logger.Info("数据库连接打开成功", zap.String("path", absPath))
 
-	conn := dbpool.Get(context.Background())
-	defer dbpool.Put(conn)
+	// 验证数据库连接
+	if err := db.Ping(); err != nil {
+		logger.Error("数据库连接测试失败", zap.String("path", absPath), zap.Error(err))
+		return err
+	}
+	logger.Info("数据库连接测试成功", zap.String("path", absPath))
 
 	// 创建测试执行时间记录表
 	createTableSQL := `CREATE TABLE IF NOT EXISTS test_execution_times (
@@ -70,13 +72,13 @@ func InitDB(dataDir string) error {
 	);`
 
 	logger.Info("正在创建表（如果不存在）")
-	if err := execSQL(conn, createTableSQL); err != nil {
+	if _, err := db.Exec(createTableSQL); err != nil {
 		logger.Error("创建表失败", zap.Error(err))
 		return err
 	}
 
 	createIndexSQL := `CREATE INDEX IF NOT EXISTS idx_test_execution_times_url ON test_execution_times(url);`
-	if err := execSQL(conn, createIndexSQL); err != nil {
+	if _, err := db.Exec(createIndexSQL); err != nil {
 		logger.Error("创建索引失败", zap.Error(err))
 		return err
 	}
@@ -86,32 +88,19 @@ func InitDB(dataDir string) error {
 	return nil
 }
 
-func execSQL(conn *sqlite.Conn, query string) error {
-	stmt, err := conn.Prepare(query)
-	if err != nil {
-		return err
-	}
-	defer stmt.Finalize()
-	_, err = stmt.Step()
-	return err
-}
-
 // RecordExecutionTime 记录测试执行时间
 func RecordExecutionTime(url string, duration time.Duration, success bool) error {
-	if dbpool == nil {
+	if db == nil {
 		return fmt.Errorf("database not initialized")
 	}
 
-	conn := dbpool.Get(context.Background())
-	defer dbpool.Put(conn)
+	_, err := db.Exec("INSERT INTO test_execution_times (url, duration_ms, success, executed_at) VALUES (?, ?, ?, ?)",
+		url,
+		int64(duration/time.Millisecond),
+		success,
+		time.Now().Format("2006-01-02 15:04:05"))
 
-	stmt := conn.Prep("INSERT INTO test_execution_times (url, duration_ms, success, executed_at) VALUES (?, ?, ?, ?)")
-	stmt.BindText(1, url)
-	stmt.BindInt64(2, int64(duration/time.Millisecond))
-	stmt.BindBool(3, success)
-	stmt.BindText(4, time.Now().Format("2006-01-02 15:04:05"))
-
-	if _, err := stmt.Step(); err != nil {
+	if err != nil {
 		logger.Error("Failed to record execution time", zap.Error(err))
 		return err
 	}
@@ -121,26 +110,14 @@ func RecordExecutionTime(url string, duration time.Duration, success bool) error
 
 // GetAverageDuration 获取指定 URL 的平均执行时间
 func GetAverageDuration(url string) (time.Duration, error) {
-	if dbpool == nil {
+	if db == nil {
 		return 0, fmt.Errorf("database not initialized")
 	}
 
-	conn := dbpool.Get(context.Background())
-	defer dbpool.Put(conn)
-
-	stmt := conn.Prep("SELECT AVG(duration_ms) FROM test_execution_times WHERE url = ? AND success = 1")
-	stmt.BindText(1, url)
-
 	var avgMs float64
-	for {
-		hasRow, err := stmt.Step()
-		if err != nil {
-			return 0, err
-		}
-		if !hasRow {
-			break
-		}
-		avgMs = stmt.ColumnFloat(0)
+	err := db.QueryRow("SELECT AVG(duration_ms) FROM test_execution_times WHERE url = ? AND success = 1", url).Scan(&avgMs)
+	if err != nil {
+		return 0, err
 	}
 
 	return time.Duration(avgMs) * time.Millisecond, nil
@@ -148,25 +125,23 @@ func GetAverageDuration(url string) (time.Duration, error) {
 
 // GetAllAverageDurations 获取所有 URL 的平均执行时间
 func GetAllAverageDurations() (map[string]time.Duration, error) {
-	if dbpool == nil {
+	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	conn := dbpool.Get(context.Background())
-	defer dbpool.Put(conn)
+	rows, err := db.Query("SELECT url, AVG(duration_ms) as avg_ms FROM test_execution_times WHERE success = 1 GROUP BY url")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-	stmt := conn.Prep("SELECT url, AVG(duration_ms) as avg_ms FROM test_execution_times WHERE success = 1 GROUP BY url")
 	averages := make(map[string]time.Duration)
-	for {
-		hasRow, err := stmt.Step()
-		if err != nil {
+	for rows.Next() {
+		var url string
+		var avgMs float64
+		if err := rows.Scan(&url, &avgMs); err != nil {
 			return nil, err
 		}
-		if !hasRow {
-			break
-		}
-		url := stmt.ColumnText(0)
-		avgMs := stmt.ColumnFloat(1)
 		averages[url] = time.Duration(avgMs) * time.Millisecond
 	}
 
@@ -175,26 +150,14 @@ func GetAllAverageDurations() (map[string]time.Duration, error) {
 
 // GetExecutionCount 获取指定 URL 的成功执行次数
 func GetExecutionCount(url string) (int, error) {
-	if dbpool == nil {
+	if db == nil {
 		return 0, fmt.Errorf("database not initialized")
 	}
 
-	conn := dbpool.Get(context.Background())
-	defer dbpool.Put(conn)
-
-	stmt := conn.Prep("SELECT COUNT(*) FROM test_execution_times WHERE url = ? AND success = 1")
-	stmt.BindText(1, url)
-
 	var count int
-	for {
-		hasRow, err := stmt.Step()
-		if err != nil {
-			return 0, err
-		}
-		if !hasRow {
-			break
-		}
-		count = stmt.ColumnInt(0)
+	err := db.QueryRow("SELECT COUNT(*) FROM test_execution_times WHERE url = ? AND success = 1", url).Scan(&count)
+	if err != nil {
+		return 0, err
 	}
 
 	return count, nil

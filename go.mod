@@ -9,7 +9,7 @@ require (
 	go.uber.org/zap v1.26.0
 	github.com/tidwall/gjson v1.14.4
 	github.com/bmatcuk/doublestar/v4 v4.6.1
-	crawshaw.io/sqlite v0.2.2
+	modernc.org/sqlite v1.53.0
 )
 
 require (
