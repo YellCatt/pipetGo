@@ -8,12 +8,14 @@
 - PSV（管道分隔值）测试用例管理
 - YAML 配置管理
 - Zap 结构化日志
-- 并行测试执行
+- 串行测试执行（确保依赖顺序）
 - 测试报告生成
 - 基于标签的测试过滤
 - 变量提取和替换
 - 流式（SSE）断言支持
 - 正则表达式断言支持
+- SQLite 历史执行时间存储和平均值计算
+- 邮件测试报告通知
 
 ## 环境要求
 
@@ -28,11 +30,18 @@ go mod download
 go build -ldflags="-s -w" -o pipet.exe
 ```
 
-### GitHub Actions
+### 预编译二进制
 
-本项目使用 GitHub Actions 进行自动化构建。您可以通过 GitHub 的 Actions 标签手动触发构建。工作流支持：
-- Windows amd64 构建
-- 自动产物上传
+通过 GitHub Actions 自动构建，支持以下平台：
+
+| 平台 | 架构 | 下载链接 |
+|------|------|----------|
+| Linux | amd64 | [pipet_linux_amd64](https://github.com/YellCatt/pipetGo/releases/download/dev-latest/pipet_linux_amd64) |
+| Linux | arm64 | [pipet_linux_arm64](https://github.com/YellCatt/pipetGo/releases/download/dev-latest/pipet_linux_arm64) |
+| Linux | mipsle | [pipet_linux_mipsle](https://github.com/YellCatt/pipetGo/releases/download/dev-latest/pipet_linux_mipsle) |
+| Windows | amd64 | [pipet_windows_amd64.exe](https://github.com/YellCatt/pipetGo/releases/download/dev-latest/pipet_windows_amd64.exe) |
+
+**嵌入式设备支持**：mipsle 版本采用静态编译（`CGO_ENABLED=0`），零系统依赖，可直接运行在极路由2等嵌入式设备上。
 
 ## 运行时文件结构
 
@@ -45,6 +54,7 @@ config/             # 配置目录
 testcases/          # 测试用例目录（可选）
   └── *.psv         # PSV/CSV 测试用例文件
 reports/            # 报告输出目录（自动创建）
+sql/                # SQLite 数据库目录（自动创建）
 ```
 
 ## 配置
@@ -64,6 +74,14 @@ log:
 test:
   report_dir: "./reports"
   test_case_dir: "./testcases"
+  data_dir: "./sql"
+
+email:
+  from: "sender@example.com"
+  to: "recipient@example.com"
+  auth_code: "your_auth_code"
+  smtp_server: "smtp.example.com"
+  smtp_port: 465
 ```
 
 ### 必需文件
@@ -74,6 +92,7 @@ test:
 | `config/config.yaml` | 配置文件 | **是** |
 | `testcases/` | 测试用例目录 | 否（运行时指定路径则不需要） |
 | `reports/` | 报告输出目录 | 否（自动创建） |
+| `sql/` | 数据库目录 | 否（自动创建） |
 
 ### 配置说明
 
@@ -84,6 +103,8 @@ test:
 - **log.output**: 日志输出（stdout 或文件路径）
 - **test.report_dir**: 测试报告输出目录
 - **test.test_case_dir**: 默认测试用例目录
+- **test.data_dir**: SQLite 数据库存储目录
+- **email**: 邮件通知配置（测试开始和结束时发送）
 
 ## 使用方法
 
@@ -244,6 +265,23 @@ stream_01|0|SSE流式断言|POST|{{base_url}}/chat/completions|{"Content-Type":"
 - `report_YYYYMMDD_HHMMSS.psv` - 完整测试结果
 - `report_YYYYMMDD_HHMMSS_error.psv` - 仅包含失败的测试用例
 
+报告格式（PSV）：
+```
+id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars|start_time|end_time
+```
+
+## 历史执行记录
+
+测试执行完成后，系统会自动：
+
+1. **记录执行时间**：每个成功的测试用例执行时间会记录到 SQLite 数据库
+2. **计算平均值**：自动计算每个测试用例的历史平均执行时间
+3. **预估执行时间**：下次运行时根据历史数据预估总执行时间
+
+数据库文件存储在 `sql/test_stats.db`，包含以下表：
+- `test_execution_times` - 每次执行的详细记录
+- `test_average_times` - 各测试用例的平均执行时间
+
 ## 依赖项
 
 - `github.com/go-resty/resty/v2` - HTTP 客户端
@@ -251,6 +289,7 @@ stream_01|0|SSE流式断言|POST|{{base_url}}/chat/completions|{"Content-Type":"
 - `github.com/tidwall/gjson` - JSON 解析
 - `go.uber.org/zap` - 日志
 - `github.com/bmatcuk/doublestar/v4` - 文件匹配
+- `github.com/ncruces/go-sqlite3` - SQLite 数据库（纯Go实现，无CGO依赖）
 
 ## 许可证
 
