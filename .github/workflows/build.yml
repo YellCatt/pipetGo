@@ -78,16 +78,28 @@ jobs:
       - name: List downloaded artifacts
         run: ls -la artifacts/
 
-      - name: Create or Update Release
+      - name: Create or Update Latest Dev Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="dev-$(date +%Y%m%d-%H%M%S)"
-          
-          gh release delete "$VERSION" --yes 2>/dev/null || true
-          
+          echo "本次构建版本: $VERSION"
+
+          gh release list --json tagName --jq '.[].tagName' | grep "^dev-" | while read old_tag; do
+            if [ "$old_tag" != "$VERSION" ]; then
+              echo "删除旧构建release: $old_tag"
+              gh release delete "$old_tag" --yes
+            fi
+          done
+
           gh release create "$VERSION" \
             --title "Development Build $VERSION" \
-            --notes "Automatic build from commit ${{ github.sha }}%0A%0A**Platforms:**%0A- Linux amd64%0A- Linux arm64%0A- Linux mipsle (极路由2 - 已禁用CGO，静态编译)%0A- Windows amd64" \
+            --notes "Automatic build from commit ${{ github.sha }}
+
+**Platforms:**
+- Linux amd64
+- Linux arm64
+- Linux mipsle (极路由2 - 已禁用CGO，静态编译)
+- Windows amd64" \
             --prerelease \
             artifacts/*
