@@ -5,6 +5,7 @@ package psv
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,10 +20,10 @@ import (
 
 // StreamAssert 表示流式断言配置
 type StreamAssert struct {
-	Kind      string `json:"kind"`      // 断言类型: contains/regex/json_path
-	Pattern   string `json:"pattern"`   // 断言模式
+	Kind      string `json:"kind"`        // 断言类型: contains/regex/json_path
+	Pattern   string `json:"pattern"`     // 断言模式
 	MaxWaitMs int    `json:"max_wait_ms"` // 最大等待时间（毫秒）
-	MinChunks int    `json:"min_chunks"` // 最小块数
+	MinChunks int    `json:"min_chunks"`  // 最小块数
 }
 
 // TestCase 表示测试用例
@@ -45,7 +46,7 @@ type TestCase struct {
 	ExpectedStatus int               `mapstructure:"expected_status"` // 期望状态码
 	ExpectedCode   int               `mapstructure:"expected_code"`   // 期望状态码（兼容字段）
 	ExpectedBody   string            `mapstructure:"expected_body"`   // 期望响应体
-	Tags           []string          `mapstructure:"tags"`           // 标签列表
+	Tags           []string          `mapstructure:"tags"`            // 标签列表
 	Extract        string            `mapstructure:"extract"`         // 变量提取规则
 	StreamMode     bool              `mapstructure:"stream_mode"`     // 是否流式模式
 	StreamAssert   []StreamAssert    `mapstructure:"stream_assert"`   // 流式断言规则
@@ -294,8 +295,16 @@ func parseKeyValueMap(str string) map[string]string {
 		return m
 	}
 
-	// JSON对象格式
+	// JSON对象格式 - 使用标准JSON解析
 	if strings.HasPrefix(str, "{") && strings.HasSuffix(str, "}") {
+		var jsonMap map[string]interface{}
+		if err := json.Unmarshal([]byte(str), &jsonMap); err == nil {
+			for k, v := range jsonMap {
+				m[k] = fmt.Sprintf("%v", v)
+			}
+			return m
+		}
+		// 如果标准解析失败，回退到字符串分割方式
 		str = strings.TrimPrefix(strings.TrimSuffix(str, "}"), "{")
 		pairs := strings.Split(str, ",")
 		for _, pair := range pairs {
