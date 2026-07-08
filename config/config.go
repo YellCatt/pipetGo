@@ -14,11 +14,12 @@ var CfgFile string
 
 // Config 表示应用程序的完整配置
 type Config struct {
-	Target TargetConfig `mapstructure:"target"` // 目标 API 配置
-	Log    LogConfig    `mapstructure:"log"`    // 日志配置
-	Test   TestConfig   `mapstructure:"test"`   // 测试配置
-	HTTP   HTTPConfig   `mapstructure:"http"`   // HTTP 客户端配置
-	Email  EmailConfig  `mapstructure:"email"`  // 邮件配置
+	Target TargetConfig      `mapstructure:"target"` // 目标 API 配置
+	Log    LogConfig         `mapstructure:"log"`    // 日志配置
+	Test   TestConfig        `mapstructure:"test"`   // 测试配置
+	HTTP   HTTPConfig        `mapstructure:"http"`   // HTTP 客户端配置
+	Email  EmailConfig       `mapstructure:"email"`  // 邮件配置
+	Vars   map[string]string `mapstructure:"vars"`   // 用户自定义变量（用于替换测试用例中的 {{var}}）
 }
 
 // HTTPConfig 表示 HTTP 客户端的配置
@@ -28,8 +29,10 @@ type HTTPConfig struct {
 
 // TargetConfig 表示目标 API 的配置
 type TargetConfig struct {
-	BaseURL string `mapstructure:"base_url"` // API 基础地址
-	Timeout int    `mapstructure:"timeout"`  // 请求超时时间（秒）
+	BaseURL       string `mapstructure:"base_url"`      // API 基础地址
+	Timeout       int    `mapstructure:"timeout"`       // 请求超时时间（秒）
+	Authorization string `mapstructure:"authorization"` // API 授权令牌
+	UserId        string `mapstructure:"user_id"`       // 用户 ID
 }
 
 // LogConfig 表示日志系统的配置

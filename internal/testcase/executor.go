@@ -25,7 +25,6 @@ import (
 	"pipetGo/internal/vars"
 )
 
-
 // TestResult 表示测试用例执行结果
 type TestResult struct {
 	TestCase       psv.TestCase  // 测试用例
@@ -72,8 +71,13 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		return result
 	}
 
-
 	// 变量替换：将 {{var}} 替换为实际值
+	logger.Debug("变量替换前",
+		zap.String("URL", tc.URL),
+		zap.Any("Headers", tc.Headers),
+		zap.String("Body", tc.Body),
+		zap.String("JSON", tc.JSON))
+
 	processedURL := vars.Replace(tc.URL)
 	processedHeaders := make(map[string]string)
 	for k, v := range tc.Headers {
@@ -81,6 +85,12 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	}
 	processedBody := vars.Replace(tc.Body)
 	processedJSON := vars.Replace(tc.JSON)
+
+	logger.Debug("变量替换后",
+		zap.String("processedURL", processedURL),
+		zap.Any("processedHeaders", processedHeaders),
+		zap.String("processedBody", processedBody),
+		zap.String("processedJSON", processedJSON))
 
 	// 构建请求体（用于报告记录）
 	var requestBody string
@@ -183,7 +193,6 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		return result
 	}
 
-
 	result.ResponseBody = string(resp.Body())
 	result.ActualStatus = resp.StatusCode()
 
@@ -203,7 +212,6 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			return result
 		}
 
-
 		// 正则表达式断言
 		if tc.BodyRegex != "" {
 			if ok, errMsg := assert.BodyRegexMatch(result.ResponseBody, tc.BodyRegex); !ok {
@@ -217,7 +225,6 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 				return result
 			}
 		}
-
 
 		// JSON 响应体断言
 		if tc.ExpectedBody != "" {
@@ -266,7 +273,6 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 
 	return result
 }
-
 
 // hasFileField 检查表单是否包含文件上传字段
 // form: 表单数据
@@ -374,7 +380,6 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 	return result
 }
 
-
 // FilterByTags 根据标签过滤测试用例
 // testCases: 测试用例列表
 // tags: 标签列表
@@ -468,10 +473,9 @@ func GenerateReport(results []TestResult) (string, string) {
 		processedURL := vars.Replace(result.TestCase.URL)
 		processedExpectedBody := vars.Replace(result.TestCase.ExpectedBody)
 
-	// 格式化东八区时间
-	startTime := timeutil.FormatDateTime(result.StartTime)
-	endTime := timeutil.FormatDateTime(result.EndTime)
-
+		// 格式化东八区时间
+		startTime := timeutil.FormatDateTime(result.StartTime)
+		endTime := timeutil.FormatDateTime(result.EndTime)
 
 		line := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%.3f|%d|%d|%s|%s|%s|%s|%s|%s|%s|%s\n",
 			escapePipe(result.TestCase.ID),
@@ -523,9 +527,8 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 	if len(timestamp) > 0 && timestamp[0] != "" {
 		ts = timestamp[0]
 	}
-	
-	reportDir := config.AppConfig.Test.ReportDir
 
+	reportDir := config.AppConfig.Test.ReportDir
 
 	// 创建报告目录
 	if err := os.MkdirAll(reportDir, 0755); err != nil {

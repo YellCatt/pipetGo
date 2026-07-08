@@ -1,6 +1,6 @@
 target:
-  base_url: "https://api.example.com"
-  timeout: 30
+  base_url: "https://dev-api.insigmind.com"
+  timeout: 360000
 
 log:
   level: "info"
@@ -14,6 +14,10 @@ test:
 
 http:
   insecure_skip_verify: true
+
+vars:
+  authorization: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJVc2VySWQiOiI1NjU3NzZiNS0xOTk4LTQxYTItN2UxYi0wOGRlZGNkMTRjMjAiLCJVc2VyTmFtZSI6IlVTRVJfYzhxTTExIiwiUmVhbE5hbWUiOiLnq6Dnn7MiLCJDb21wYW55SWQiOiI5ZjllZjI4Ni02OTMyLTRjNzQtMDZhMi0wOGRlOTA3OGZmMjIiLCJDb21wYW55TmFtZSI6IuiLj-W3nuenkei-vueUteair-aciemZkOWFrOWPuCIsIlVzZXJUeXBlIjoiUHVyY2hhc2VyIiwiVXNlclN0YXR1cyI6Ik5vcm1hbCIsIlVzZXJSb2xlcyI6IiIsIkNoYW5uZWxUeXBlIjoiV2ViIiwibmJmIjoxNzgzNTE4NDY4LCJleHAiOjE3ODM1NDg0NjgsImlzcyI6Imh0dHBzOi8vZGV2LWFwaS5pbnNpZ21pbmQuY29tIiwiYXVkIjoiaHR0cHM6Ly9kZXYtdnVlLmluc2lnbWluZC5jb20ifQ.-vS-qildYWDc-7XXk-5SwDoGs1kJ2_eEpbu6wUwdsyM"
+  user_id: "c3864e8c-8b23-489c-404c-08decd198473"
 
 email:
   from: "768305875@qq.com"

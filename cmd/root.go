@@ -64,15 +64,41 @@ func initConfig() {
 		Encoding: config.AppConfig.Log.Encoding,
 		Output:   config.AppConfig.Log.Output,
 	})
+
+	// 初始化内置变量
 	vars.Set("base_url", config.AppConfig.Target.BaseURL)
+
+	// 加载用户自定义变量（支持任意变量名）
+	if len(config.AppConfig.Vars) > 0 {
+		vars.InitFromConfig(config.AppConfig.Vars)
+		logger.Info("用户自定义变量加载完成", zap.Any("vars", maskVars(config.AppConfig.Vars)))
+	} else {
+		logger.Info("未配置用户自定义变量")
+	}
 
 	email.InitEmail(email.EmailConfig{
 		FromEmail:  config.AppConfig.Email.From,
 		ToEmail:    config.AppConfig.Email.To,
 		AuthCode:   config.AppConfig.Email.AuthCode,
-		SMTPServer: config.AppConfig.Email.SMTPServer,
-		SMTPPort:   config.AppConfig.Email.SMTPPort,
+		SMTPServer: config.AppConfig.Email.SMTPPort,
 	})
+}
+
+// maskVars 用于日志中掩码敏感变量值
+func maskVars(vars map[string]string) map[string]string {
+	result := make(map[string]string)
+	for k, v := range vars {
+		result[k] = maskString(v)
+	}
+	return result
+}
+
+// maskString 用于日志中掩码敏感信息
+func maskString(s string) string {
+	if len(s) <= 8 {
+		return "***"
+	}
+	return s[:4] + "***" + s[len(s)-4:]
 }
 
 // runTests 执行测试主流程
@@ -87,7 +113,7 @@ func runTests(paths []string) {
 		logger.Warn("SQLite 数据库初始化失败", zap.Error(err))
 	} else {
 		logger.Info("SQLite 数据库初始化成功")
-		
+
 		// 检查数据库中的历史记录数
 		count, err := storage.GetTotalExecutionCount()
 		if err != nil {
@@ -132,7 +158,7 @@ func runTests(paths []string) {
 
 	// 开始执行测试
 	logger.Info("Starting API tests", zap.Int("count", len(testCases)))
-	
+
 	// 计算预估执行时间
 	estimatedDuration := calculateEstimatedDuration(testCases)
 
