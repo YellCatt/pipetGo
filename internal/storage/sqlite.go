@@ -54,6 +54,13 @@ func InitDB(dataDir string) error {
 		return err
 	}
 	logger.Info("数据库连接打开成功", zap.String("path", absPath))
+	
+	// 检查数据库文件是否存在
+	if _, err := os.Stat(absPath); err == nil {
+		logger.Info("数据库文件已存在", zap.String("path", absPath))
+	} else {
+		logger.Warn("数据库文件不存在，将创建新文件", zap.String("path", absPath))
+	}
 
 	// 验证数据库连接
 	if err := db.Ping(); err != nil {
@@ -155,11 +162,13 @@ func GetAverageDuration(url string) (time.Duration, error) {
 // GetAllAverageDurations 获取所有 URL 的平均执行时间
 func GetAllAverageDurations() (map[string]time.Duration, error) {
 	if db == nil {
+		logger.Warn("GetAllAverageDurations: database not initialized")
 		return nil, fmt.Errorf("database not initialized")
 	}
 
 	rows, err := db.Query("SELECT url, AVG(duration_ms) as avg_ms FROM test_execution_times WHERE success = 1 GROUP BY url")
 	if err != nil {
+		logger.Warn("GetAllAverageDurations: query failed", zap.Error(err))
 		return nil, err
 	}
 	defer rows.Close()
@@ -169,9 +178,16 @@ func GetAllAverageDurations() (map[string]time.Duration, error) {
 		var url string
 		var avgMs float64
 		if err := rows.Scan(&url, &avgMs); err != nil {
+			logger.Warn("GetAllAverageDurations: scan failed", zap.Error(err))
 			return nil, err
 		}
 		averages[url] = time.Duration(avgMs) * time.Millisecond
+	}
+
+	logger.Info("GetAllAverageDurations: found", zap.Int("count", len(averages)), zap.Any("averages", averages))
+	
+	if len(averages) == 0 {
+		logger.Warn("GetAllAverageDurations: no historical data found")
 	}
 
 	return averages, nil
@@ -185,6 +201,21 @@ func GetExecutionCount(url string) (int, error) {
 
 	var count int
 	err := db.QueryRow("SELECT COUNT(*) FROM test_execution_times WHERE url = ? AND success = 1", url).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
+// GetTotalExecutionCount 获取数据库中成功执行的总记录数
+func GetTotalExecutionCount() (int, error) {
+	if db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM test_execution_times WHERE success = 1").Scan(&count)
 	if err != nil {
 		return 0, err
 	}

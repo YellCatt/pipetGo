@@ -87,6 +87,14 @@ func runTests(paths []string) {
 		logger.Warn("SQLite 数据库初始化失败", zap.Error(err))
 	} else {
 		logger.Info("SQLite 数据库初始化成功")
+		
+		// 检查数据库中的历史记录数
+		count, err := storage.GetTotalExecutionCount()
+		if err != nil {
+			logger.Warn("Failed to get execution count", zap.Error(err))
+		} else {
+			logger.Info("Historical execution records found", zap.Int("count", count))
+		}
 	}
 
 	// 如果未指定路径，使用默认测试用例目录
