@@ -9,6 +9,8 @@ require (
 	go.uber.org/zap v1.26.0
 	github.com/tidwall/gjson v1.14.4
 	github.com/bmatcuk/doublestar/v4 v4.6.1
+	modernc.org/sqlite v1.26.0
+	modernc.org/libc v1.75.0
 )
 
 require (
