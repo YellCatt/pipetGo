@@ -194,9 +194,9 @@ func parseLine(line string) []string {
 	}
 	fields = append(fields, current.String())
 
-	// 去除字段两端的引号和空格
+	// 去除字段两端的空格（保留内部内容不变）
 	for i, f := range fields {
-		fields[i] = strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(f, "\""), "\""))
+		fields[i] = strings.TrimSpace(f)
 	}
 
 	return fields
