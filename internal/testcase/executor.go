@@ -68,6 +68,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		result.Passed = true
 		result.EndTime = timeutil.Now()
 		result.Duration = result.EndTime.Sub(startTime)
+		fmt.Printf("[%s] [%s] %s ... SKIP (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 		return result
 	}
 
@@ -177,6 +178,8 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		result.EndTime = timeutil.Now()
 		result.Duration = result.EndTime.Sub(startTime)
 		logger.Error("Test failed", zap.String("id", tc.ID), zap.Error(err))
+		fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
+		fmt.Printf("            Error: %s\n", result.Error)
 		return result
 	}
 
@@ -195,6 +198,8 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			result.EndTime = timeutil.Now()
 			result.Duration = result.EndTime.Sub(startTime)
 			logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
+			fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
+			fmt.Printf("            Error: %s\n", result.Error)
 			return result
 		}
 
@@ -207,6 +212,8 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 				result.EndTime = timeutil.Now()
 				result.Duration = result.EndTime.Sub(startTime)
 				logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
+				fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
+				fmt.Printf("            Error: %s\n", result.Error)
 				return result
 			}
 		}
@@ -220,6 +227,8 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 				result.EndTime = timeutil.Now()
 				result.Duration = result.EndTime.Sub(startTime)
 				logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
+				fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
+				fmt.Printf("            Error: %s\n", result.Error)
 				return result
 			}
 		}
@@ -248,6 +257,9 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	result.EndTime = timeutil.Now()
 	result.Duration = result.EndTime.Sub(startTime)
 	logger.Info("Test passed", zap.String("id", tc.ID), zap.Duration("duration", result.Duration))
+
+	// 打印测试结果
+	fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 
 	// 记录成功的执行时间到数据库
 	go storage.RecordExecutionTime(vars.Replace(tc.URL), result.Duration, true)
@@ -319,11 +331,20 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 			}
 		}
 
-		if ok, _ := assert.StreamAssert(aggregatedContent.String(), chunkCount, assertConfigs); ok {
+		if ok, errMsg := assert.StreamAssert(aggregatedContent.String(), chunkCount, assertConfigs); ok {
 			result.Passed = true
 			result.EndTime = timeutil.Now()
 			result.Duration = result.EndTime.Sub(startTime)
 			logger.Info("Stream assertion passed", zap.String("id", tc.ID))
+			fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
+			return result
+		} else {
+			result.Error = errMsg
+			result.Passed = false
+			result.EndTime = timeutil.Now()
+			result.Duration = result.EndTime.Sub(startTime)
+			fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
+			fmt.Printf("            Error: %s\n", result.Error)
 			return result
 		}
 
@@ -340,6 +361,8 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 			result.Passed = false
 			result.EndTime = timeutil.Now()
 			result.Duration = result.EndTime.Sub(startTime)
+			fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
+			fmt.Printf("            Error: %s\n", result.Error)
 			return result
 		}
 	}
@@ -347,6 +370,7 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 	result.Passed = true
 	result.EndTime = timeutil.Now()
 	result.Duration = result.EndTime.Sub(startTime)
+	fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 	return result
 }
 
@@ -546,28 +570,11 @@ func PrintSummary(results []TestResult) {
 		}
 	}
 
-	// 打印标题
+	// 打印汇总信息
 	fmt.Println()
 	fmt.Println("╔══════════════════════════════════════════════════════╗")
 	fmt.Println("║              pipet 接口测试                          ║")
 	fmt.Println("╚══════════════════════════════════════════════════════╝")
-	fmt.Println()
-
-	// 打印每个测试用例的结果
-	for _, r := range results {
-		status := "PASS"
-		if r.TestCase.Skip {
-			status = "SKIP"
-		} else if !r.Passed {
-			status = "FAIL"
-		}
-		fmt.Printf("  [%s] %s ... %s (%.3fs)\n", r.TestCase.ID, r.TestCase.Desc, status, r.Duration.Seconds())
-		if !r.Passed && !r.TestCase.Skip {
-			fmt.Printf("       Error: %s\n", r.Error)
-		}
-	}
-
-	// 打印汇总信息
 	fmt.Println()
 	fmt.Printf("Total: %d, Passed: %d, Failed: %d, Skipped: %d\n", passed+failed+skipped, passed, failed, skipped)
 	fmt.Printf("Total duration: %.3fs\n", totalDuration.Seconds())
