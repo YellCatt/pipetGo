@@ -20,6 +20,7 @@ import (
 	"pipetGo/internal/httpclient"
 	"pipetGo/internal/logger"
 	"pipetGo/internal/psv"
+	"pipetGo/internal/storage"
 	"pipetGo/internal/timeutil"
 	"pipetGo/internal/vars"
 )
@@ -247,6 +248,9 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	result.EndTime = timeutil.Now()
 	result.Duration = result.EndTime.Sub(startTime)
 	logger.Info("Test passed", zap.String("id", tc.ID), zap.Duration("duration", result.Duration))
+
+	// 记录成功的执行时间到数据库
+	go storage.RecordExecutionTime(vars.Replace(tc.URL), result.Duration, true)
 
 	return result
 }

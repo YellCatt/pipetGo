@@ -193,3 +193,26 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 	log.Println("发送测试报告邮件...")
 	return SendEmail(subject, body)
 }
+
+// SendTestStartEmail 发送测试开始通知邮件
+func SendTestStartEmail(testCaseCount int, estimatedDuration string) error {
+	if Config.FromEmail == "" || Config.ToEmail == "" || Config.AuthCode == "" {
+		log.Println("邮件配置未设置，跳过邮件发送")
+		return nil
+	}
+
+	// 使用东八区时间
+	subject := fmt.Sprintf("【测试开始】pipetGo - %s", timeutil.FormatDateTime(timeutil.Now()))
+
+	var body strings.Builder
+	body.WriteString("===== 测试开始通知 =====\n\n")
+	body.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(timeutil.Now())))
+	body.WriteString(fmt.Sprintf("\n测试用例统计:\n"))
+	body.WriteString(fmt.Sprintf("  本次测试用例数: %d\n", testCaseCount))
+	body.WriteString(fmt.Sprintf("\n预估执行时间: %s\n", estimatedDuration))
+	body.WriteString("\n===== 通知结束 =====\n")
+	body.WriteString("来自 pipetGo 测试程序")
+
+	log.Println("发送测试开始通知邮件...")
+	return SendEmail(subject, body.String())
+}
