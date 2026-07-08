@@ -95,11 +95,3 @@ jobs:
           gh release create "$VERSION" \
             --title "Development Build $VERSION" \
             --notes "Automatic build from commit ${{ github.sha }}
-
-**Platforms:**
-- Linux amd64
-- Linux arm64
-- Linux mipsle (极路由2 - 已禁用CGO，静态编译)
-- Windows amd64" \
-            --prerelease \
-            artifacts/*
