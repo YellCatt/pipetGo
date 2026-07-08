@@ -24,9 +24,10 @@ func InitDB(dataDir string) error {
 	logger.Info("数据目录参数值", zap.String("dataDir", dataDir))
 	logger.Info("数据目录参数是否为空", zap.Bool("isEmpty", dataDir == ""))
 	
+	// 如果配置为空，使用默认值
 	if dataDir == "" {
-		logger.Error("数据目录为空，无法创建数据库")
-		return fmt.Errorf("数据目录为空")
+		logger.Info("数据目录为空，使用默认值 ./sql")
+		dataDir = "./sql"
 	}
 	
 	logger.Info("正在尝试创建数据目录", zap.String("dataDir", dataDir))
