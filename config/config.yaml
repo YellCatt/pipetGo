@@ -11,6 +11,8 @@ test:
   report_dir: "./reports"
   test_case_dir: "./testcases"
   data_dir: "./sql"
+  severe_status:
+    - 500
 
 http:
   insecure_skip_verify: true
