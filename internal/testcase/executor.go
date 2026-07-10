@@ -184,6 +184,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			}
 		}
 		_ = preResult // 忽略前置结果，继续执行当前测试
+	}
 
 	// 变量替换：将 {{var}} 替换为实际值
 	logger.Debug("变量替换前",
