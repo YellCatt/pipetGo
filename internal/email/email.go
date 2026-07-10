@@ -147,22 +147,18 @@ func GenerateTestReportContent(results []testcase.TestResult) string {
 	if len(results) > 0 {
 		sb.WriteString("测试详情:\n")
 		sb.WriteString("-" + strings.Repeat("-", 78) + "\n")
-		sb.WriteString(fmt.Sprintf("%-15s %-30s %-10s %-15s %s\n", "ID", "描述", "状态", "耗时", "错误信息"))
+		sb.WriteString(fmt.Sprintf("%-15s %-40s %-10s %-15s %s\n", "ID", "描述", "状态", "耗时", "错误信息"))
 		sb.WriteString("-" + strings.Repeat("-", 78) + "\n")
 
 		for _, r := range results {
-			status := "✅ PASS"
-			if r.TestCase.Skip {
-				status = "⏭ SKIP"
-			} else if !r.Passed {
-				status = "❌ FAIL"
+			if !r.Passed && !r.TestCase.Skip {
+				sb.WriteString(fmt.Sprintf("%-15s %-40s %-10s %-15v %s\n",
+					r.TestCase.ID,
+					r.TestCase.Desc,
+					"F",
+					r.Duration,
+					r.Error))
 			}
-			sb.WriteString(fmt.Sprintf("%-15s %-30s %-10s %-15v %s\n",
-				r.TestCase.ID,
-				truncateString(r.TestCase.Desc, 28),
-				status,
-				r.Duration,
-				r.Error))
 		}
 		sb.WriteString("-" + strings.Repeat("-", 78) + "\n")
 	}
