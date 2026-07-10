@@ -44,10 +44,12 @@ type LogConfig struct {
 
 // TestConfig 表示测试相关的配置
 type TestConfig struct {
-	ReportDir    string `mapstructure:"report_dir"`    // 测试报告输出目录
-	TestCaseDir  string `mapstructure:"test_case_dir"` // 默认测试用例目录
-	DataDir      string `mapstructure:"data_dir"`      // 数据存储目录（用于SQLite数据库）
-	SevereStatus []int  `mapstructure:"severe_status"` // 严重错误状态码列表，这些状态码的测试用例失败时优先于其他失败用例
+	ReportDir     string   `mapstructure:"report_dir"`     // 测试报告输出目录
+	TestCaseDir   string   `mapstructure:"test_case_dir"`  // 默认测试用例目录
+	DataDir       string   `mapstructure:"data_dir"`       // 数据存储目录（用于SQLite数据库）
+	SevereStatus  []int    `mapstructure:"severe_status"`  // 严重错误状态码列表，这些状态码的测试用例失败时优先于其他失败用例
+	GlobalPre     []string `mapstructure:"global_pre"`     // 全局前置条件测试用例ID列表（所有测试执行前运行）
+	GlobalPost    []string `mapstructure:"global_post"`    // 全局后置条件测试用例ID列表（所有测试执行后运行）
 }
 
 // EmailConfig 表示邮件发送相关的配置

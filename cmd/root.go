@@ -137,6 +137,9 @@ func runTests(paths []string) {
 		os.Exit(1)
 	}
 
+	// 设置所有测试用例（用于链式测试查找前置条件）
+	testcase.SetAllTestCases(testCases)
+
 	// 解析标签过滤参数
 	var tags []string
 	if tagsFlag != "" {
@@ -197,6 +200,35 @@ func runTests(paths []string) {
 	// 生成报告时间戳（测试开始时生成，后续更新报告时使用同一个时间戳）
 	reportTimestamp := timeutil.FormatCompact(timeutil.Now())
 
+	// 执行全局前置条件（所有测试用例执行前运行）
+	if len(config.AppConfig.Test.GlobalPre) > 0 {
+		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
+		fmt.Printf("║ 执行全局前置条件                                       ║\n")
+		fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
+
+		for _, preID := range config.AppConfig.Test.GlobalPre {
+			found := false
+			for _, tc := range testCases {
+				if tc.ID == preID {
+					fmt.Printf("[全局前置] 执行: %s - %s\n", tc.ID, tc.Desc)
+					result := testcase.ExecuteTestCase(tc)
+					if !result.Passed {
+						fmt.Printf("[全局前置] ❌ 失败: %s\n", result.Error)
+						fmt.Printf("\n全局前置条件失败，终止测试执行\n")
+						os.Exit(1)
+					}
+					fmt.Printf("[全局前置] ✅ 成功\n")
+					found = true
+					break
+				}
+			}
+			if !found {
+				fmt.Printf("[全局前置] ⚠️ 未找到测试用例: %s\n", preID)
+			}
+		}
+		fmt.Println()
+	}
+
 	// 运行测试（串行执行），每完成一个测试就更新一次报告
 	var results []testcase.TestResult
 	for i, tc := range testCases {
@@ -227,6 +259,34 @@ func runTests(paths []string) {
 		logger.Warn("Failed to calculate and store average durations", zap.Error(err))
 	} else {
 		logger.Info("Successfully calculated and stored average durations")
+	}
+
+	// 执行全局后置条件（所有测试用例执行后运行）
+	if len(config.AppConfig.Test.GlobalPost) > 0 {
+		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
+		fmt.Printf("║ 执行全局后置条件                                       ║\n")
+		fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
+
+		for _, postID := range config.AppConfig.Test.GlobalPost {
+			found := false
+			for _, tc := range testCases {
+				if tc.ID == postID {
+					fmt.Printf("[全局后置] 执行: %s - %s\n", tc.ID, tc.Desc)
+					result := testcase.ExecuteTestCase(tc)
+					if !result.Passed {
+						fmt.Printf("[全局后置] ❌ 失败: %s\n", result.Error)
+					} else {
+						fmt.Printf("[全局后置] ✅ 成功\n")
+					}
+					found = true
+					break
+				}
+			}
+			if !found {
+				fmt.Printf("[全局后置] ⚠️ 未找到测试用例: %s\n", postID)
+			}
+		}
+		fmt.Println()
 	}
 
 	// 如果有失败的测试用例，退出码设为 1

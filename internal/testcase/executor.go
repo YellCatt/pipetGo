@@ -48,6 +48,86 @@ var (
 	globalVarsMu sync.Mutex                // 保护 globalVars 的互斥锁
 )
 
+var allTestCases []psv.TestCase
+
+func SetAllTestCases(cases []psv.TestCase) {
+	allTestCases = cases
+}
+
+func findTestCaseByID(id string) *psv.TestCase {
+	for _, tc := range allTestCases {
+		if tc.ID == id {
+			return &tc
+		}
+	}
+	return nil
+}
+
+func executePreConditions(preIDs []string) (TestResult, error) {
+	for _, preID := range preIDs {
+		preTC := findTestCaseByID(preID)
+		if preTC == nil {
+			errMsg := fmt.Sprintf("前置条件测试用例未找到: %s", preID)
+			logger.Error(errMsg)
+			return TestResult{}, fmt.Errorf(errMsg)
+		}
+
+		fmt.Printf("[前置条件] 执行: %s - %s\n", preTC.ID, preTC.Desc)
+		preResult := ExecuteTestCase(*preTC)
+		if !preResult.Passed {
+			errMsg := fmt.Sprintf("前置条件失败: %s - %s", preID, preResult.Error)
+			logger.Error(errMsg)
+			return preResult, fmt.Errorf(errMsg)
+		}
+		fmt.Printf("[前置条件] ✅ 成功\n")
+	}
+	return TestResult{}, nil
+}
+
+func executePostConditions(postIDs []string) {
+	for _, postID := range postIDs {
+		postTC := findTestCaseByID(postID)
+		if postTC == nil {
+			logger.Error(fmt.Sprintf("后置条件测试用例未找到: %s", postID))
+			continue
+		}
+
+		fmt.Printf("[后置条件] 执行: %s - %s\n", postTC.ID, postTC.Desc)
+		postResult := ExecuteTestCase(*postTC)
+		if !postResult.Passed {
+			fmt.Printf("[后置条件] ❌ 失败: %s\n", postResult.Error)
+			logger.Warn(fmt.Sprintf("后置条件失败: %s - %s", postID, postResult.Error))
+		} else {
+			fmt.Printf("[后置条件] ✅ 成功\n")
+		}
+	}
+}
+
+func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) TestResult {
+	result.EndTime = timeutil.Now()
+	result.Duration = result.EndTime.Sub(startTime)
+
+	if result.Passed {
+		logger.Info("Test passed", zap.String("id", tc.ID), zap.Duration("duration", result.Duration))
+		fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
+		go storage.RecordExecutionTime(tc.ID, tc.Desc, tc.FileName, vars.Replace(tc.URL), result.Duration, true)
+	} else {
+		logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
+		fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
+		if result.Error != "" {
+			fmt.Printf("            Error: %s\n", result.Error)
+		}
+		go storage.RecordExecutionTime(tc.ID, tc.Desc, tc.FileName, vars.Replace(tc.URL), result.Duration, false)
+	}
+
+	// 执行后置条件（无论测试成功与否都会执行）
+	if len(tc.Post) > 0 {
+		executePostConditions(tc.Post)
+	}
+
+	return result
+}
+
 // ExecuteTestCase 执行单个测试用例
 // tc: 测试用例
 // 返回: 测试结果
@@ -70,6 +150,24 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		fmt.Printf("[%s] [%s] %s ... SKIP (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 		return result
 	}
+
+	// 执行前置条件（链式测试）
+	if len(tc.Pre) > 0 {
+		preResult, err := executePreConditions(tc.Pre)
+		if err != nil {
+			// 根据失败模式决定是否继续执行
+			if tc.FailMode == "continue" {
+				fmt.Printf("[%s] [%s] %s ... 前置条件失败但继续执行: %s\n", timeutil.FormatDateTime(timeutil.Now()), tc.ID, tc.Desc, err.Error())
+			} else {
+				result.Passed = false
+				result.Error = err.Error()
+				result.EndTime = timeutil.Now()
+				result.Duration = result.EndTime.Sub(startTime)
+				fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs) - 前置条件失败: %s\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds(), result.Error)
+				return result
+			}
+		}
+		_ = preResult // 忽略前置结果，继续执行当前测试
 
 	// 变量替换：将 {{var}} 替换为实际值
 	logger.Debug("变量替换前",
@@ -185,12 +283,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	if err != nil {
 		result.Error = err.Error()
 		result.Passed = false
-		result.EndTime = timeutil.Now()
-		result.Duration = result.EndTime.Sub(startTime)
-		logger.Error("Test failed", zap.String("id", tc.ID), zap.Error(err))
-		fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
-		fmt.Printf("            Error: %s\n", result.Error)
-		return result
+		return finishTestCase(tc, result, startTime)
 	}
 
 	result.ResponseBody = string(resp.Body())
@@ -204,12 +297,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		if tc.ExpectedStatus > 0 && resp.StatusCode() != tc.ExpectedStatus {
 			result.Error = fmt.Sprintf("expected status %d, got %d", tc.ExpectedStatus, resp.StatusCode())
 			result.Passed = false
-			result.EndTime = timeutil.Now()
-			result.Duration = result.EndTime.Sub(startTime)
-			logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
-			fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
-			fmt.Printf("            Error: %s\n", result.Error)
-			return result
+			return finishTestCase(tc, result, startTime)
 		}
 
 		// 正则表达式断言
@@ -217,12 +305,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			if ok, errMsg := assert.BodyRegexMatch(result.ResponseBody, tc.BodyRegex); !ok {
 				result.Error = errMsg
 				result.Passed = false
-				result.EndTime = timeutil.Now()
-				result.Duration = result.EndTime.Sub(startTime)
-				logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
-				fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
-				fmt.Printf("            Error: %s\n", result.Error)
-				return result
+				return finishTestCase(tc, result, startTime)
 			}
 		}
 
@@ -231,12 +314,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), result.ResponseBody, tc.MatchMode); !ok {
 				result.Error = errMsg
 				result.Passed = false
-				result.EndTime = timeutil.Now()
-				result.Duration = result.EndTime.Sub(startTime)
-				logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
-				fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
-				fmt.Printf("            Error: %s\n", result.Error)
-				return result
+				return finishTestCase(tc, result, startTime)
 			}
 		}
 
@@ -261,17 +339,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 
 	// 测试通过
 	result.Passed = true
-	result.EndTime = timeutil.Now()
-	result.Duration = result.EndTime.Sub(startTime)
-	logger.Info("Test passed", zap.String("id", tc.ID), zap.Duration("duration", result.Duration))
-
-	// 打印测试结果
-	fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
-
-	// 记录成功的执行时间到数据库
-	go storage.RecordExecutionTime(tc.ID, tc.Desc, tc.FileName, vars.Replace(tc.URL), result.Duration, true)
-
-	return result
+	return finishTestCase(tc, result, startTime)
 }
 
 // hasFileField 检查表单是否包含文件上传字段

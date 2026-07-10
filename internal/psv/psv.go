@@ -53,8 +53,9 @@ type TestCase struct {
 	StreamAssert   []StreamAssert    `mapstructure:"stream_assert"`   // 流式断言规则
 	MatchMode      string            `mapstructure:"match_mode"`      // 匹配模式: exact/subset
 	BodyRegex      string            `mapstructure:"body_regex"`      // 响应体正则表达式
-	Pre            []string          `mapstructure:"pre"`             // 前置条件
-	Post           []string          `mapstructure:"post"`            // 后置条件
+	Pre        []string          `mapstructure:"pre"`         // 前置条件
+	Post       []string          `mapstructure:"post"`        // 后置条件
+	FailMode   string            `mapstructure:"fail_mode"`   // 失败模式: stop(默认)/continue
 }
 
 // ParseFile 解析单个PSV文件
@@ -264,6 +265,8 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 			tc.Pre = parseDelimited(value, ";")
 		case "post":
 			tc.Post = parseDelimited(value, ";")
+		case "fail_mode":
+			tc.FailMode = value
 		}
 	}
 
