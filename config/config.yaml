@@ -22,6 +22,7 @@ vars:
   user_id: "c3864e8c-8b23-489c-404c-08decd198473"
 
 email:
+  enabled: true
   from: "768305875@qq.com"
   to: "768305875@qq.com"
   auth_code: "gpfruabgjebubdad"

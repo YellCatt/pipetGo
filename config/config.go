@@ -52,11 +52,12 @@ type TestConfig struct {
 
 // EmailConfig 表示邮件发送相关的配置
 type EmailConfig struct {
-	From       string `mapstructure:"from"`        // 发件人邮箱
-	To         string `mapstructure:"to"`          // 收件人邮箱
-	AuthCode   string `mapstructure:"auth_code"`   // 邮箱授权码
+	Enabled    bool   `mapstructure:"enabled"`    // 是否启用邮件发送
+	From       string `mapstructure:"from"`       // 发件人邮箱
+	To         string `mapstructure:"to"`         // 收件人邮箱
+	AuthCode   string `mapstructure:"auth_code"`  // 邮箱授权码
 	SMTPServer string `mapstructure:"smtp_server"` // SMTP 服务器地址
-	SMTPPort   int    `mapstructure:"smtp_port"`   // SMTP 端口
+	SMTPPort   int    `mapstructure:"smtp_port"`  // SMTP 端口
 }
 
 // AppConfig 存储全局配置实例

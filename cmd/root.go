@@ -77,6 +77,7 @@ func initConfig() {
 	}
 
 	email.InitEmail(email.EmailConfig{
+		Enabled:    config.AppConfig.Email.Enabled,
 		FromEmail:  config.AppConfig.Email.From,
 		ToEmail:    config.AppConfig.Email.To,
 		AuthCode:   config.AppConfig.Email.AuthCode,

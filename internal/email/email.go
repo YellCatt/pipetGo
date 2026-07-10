@@ -14,8 +14,8 @@ import (
 )
 
 type EmailConfig struct {
+	Enabled    bool
 	FromEmail  string
-
 	ToEmail    string
 	AuthCode   string
 	SMTPServer string
@@ -181,6 +181,10 @@ func truncateString(s string, maxLen int) string {
 }
 
 func SendTestReportEmail(results []testcase.TestResult) error {
+	if !Config.Enabled {
+		log.Println("邮件发送功能已禁用，跳过邮件发送")
+		return nil
+	}
 	if Config.FromEmail == "" || Config.ToEmail == "" || Config.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过邮件发送")
 		return nil
@@ -197,6 +201,10 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 
 // SendTestStartEmail 发送测试开始通知邮件
 func SendTestStartEmail(testCaseCount int, estimatedDuration string) error {
+	if !Config.Enabled {
+		log.Println("邮件发送功能已禁用，跳过邮件发送")
+		return nil
+	}
 	if Config.FromEmail == "" || Config.ToEmail == "" || Config.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过邮件发送")
 		return nil
