@@ -125,6 +125,22 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 		executePostConditions(tc.Post)
 	}
 
+	// 清理当前测试用例提取的变量（默认清理，除非设置 keep_vars=true）
+	if !tc.KeepVars && tc.Extract != "" {
+		extractParts := strings.Split(tc.Extract, ",")
+		globalVarsMu.Lock()
+		for _, part := range extractParts {
+			part = strings.TrimSpace(part)
+			if idx := strings.Index(part, "="); idx != -1 {
+				varName := strings.TrimSpace(part[:idx])
+				delete(globalVars, varName)
+				vars.Delete(varName)
+				logger.Debug("Cleaned up variable", zap.String("name", varName), zap.String("test", tc.ID))
+			}
+		}
+		globalVarsMu.Unlock()
+	}
+
 	return result
 }
 

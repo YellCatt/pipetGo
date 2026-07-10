@@ -56,6 +56,7 @@ type TestCase struct {
 	Pre        []string          `mapstructure:"pre"`         // 前置条件
 	Post       []string          `mapstructure:"post"`        // 后置条件
 	FailMode   string            `mapstructure:"fail_mode"`   // 失败模式: stop(默认)/continue
+	KeepVars   bool              `mapstructure:"keep_vars"`   // 是否保留提取的变量（默认false，即自动清理）
 }
 
 // ParseFile 解析单个PSV文件
@@ -267,6 +268,8 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 			tc.Post = parseDelimited(value, ";")
 		case "fail_mode":
 			tc.FailMode = value
+		case "keep_vars":
+			tc.KeepVars = value == "1" || strings.EqualFold(value, "true")
 		}
 	}
 

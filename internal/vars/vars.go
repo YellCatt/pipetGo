@@ -44,6 +44,14 @@ func GetAll() map[string]string {
 	return result
 }
 
+// Delete 删除指定变量
+// key: 变量名
+func Delete(key string) {
+	varsMu.Lock()
+	defer varsMu.Unlock()
+	delete(vars, key)
+}
+
 // Replace 替换字符串中的变量引用
 // text: 包含变量引用的字符串（格式: {{var}}）
 // 返回: 替换后的字符串
