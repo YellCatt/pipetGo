@@ -14,7 +14,8 @@
 - 变量提取和替换
 - 流式（SSE）断言支持
 - 正则表达式断言支持
-- SQLite 历史执行时间存储和平均值计算
+- CSV 历史执行时间存储和平均值计算
+
 - 邮件测试报告通知
 
 ## 环境要求
@@ -54,8 +55,9 @@ config/             # 配置目录
 testcases/          # 测试用例目录（可选）
   └── *.psv         # PSV/CSV 测试用例文件
 reports/            # 报告输出目录（自动创建）
-sql/                # SQLite 数据库目录（自动创建）
+sql/                # CSV 数据目录（自动创建）
 ```
+
 
 ## 配置
 
@@ -92,7 +94,8 @@ email:
 | `config/config.yaml` | 配置文件 | **是** |
 | `testcases/` | 测试用例目录 | 否（运行时指定路径则不需要） |
 | `reports/` | 报告输出目录 | 否（自动创建） |
-| `sql/` | 数据库目录 | 否（自动创建） |
+| `sql/` | CSV 数据目录 | 否（自动创建） |
+
 
 ### 配置说明
 
@@ -103,7 +106,8 @@ email:
 - **log.output**: 日志输出（stdout 或文件路径）
 - **test.report_dir**: 测试报告输出目录
 - **test.test_case_dir**: 默认测试用例目录
-- **test.data_dir**: SQLite 数据库存储目录
+- **test.data_dir**: CSV 数据存储目录
+
 - **email**: 邮件通知配置（测试开始和结束时发送）
 
 ## 使用方法
@@ -274,13 +278,14 @@ id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_st
 
 测试执行完成后，系统会自动：
 
-1. **记录执行时间**：每个成功的测试用例执行时间会记录到 SQLite 数据库
+1. **记录执行时间**：每个测试用例执行时间会记录到 CSV 文件
 2. **计算平均值**：自动计算每个测试用例的历史平均执行时间
 3. **预估执行时间**：下次运行时根据历史数据预估总执行时间
 
-数据库文件存储在 `sql/test_stats.db`，包含以下表：
-- `test_execution_times` - 每次执行的详细记录
-- `test_average_times` - 各测试用例的平均执行时间
+CSV 文件存储在 `sql/` 目录，包含以下文件：
+- `test_execution_times.csv` - 每次执行的详细记录
+- `test_average_times.csv` - 各测试用例的平均执行时间
+
 
 ## 依赖项
 
@@ -289,7 +294,8 @@ id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_st
 - `github.com/tidwall/gjson` - JSON 解析
 - `go.uber.org/zap` - 日志
 - `github.com/bmatcuk/doublestar/v4` - 文件匹配
-- `github.com/ncruces/go-sqlite3` - SQLite 数据库（纯Go实现，无CGO依赖）
+- `encoding/csv` - 标准库 CSV 读写
+
 
 ## 许可证
 

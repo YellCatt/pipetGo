@@ -111,14 +111,14 @@ func runTests(paths []string) {
 	// 初始化 HTTP 客户端
 	httpclient.InitClient()
 
-	// 初始化 SQLite 数据库
-	logger.Info("准备初始化 SQLite 数据库", zap.String("DataDir", config.AppConfig.Test.DataDir))
+	// 初始化 CSV 存储
+	logger.Info("准备初始化 CSV 存储", zap.String("DataDir", config.AppConfig.Test.DataDir))
 	if err := storage.InitDB(config.AppConfig.Test.DataDir); err != nil {
-		logger.Warn("SQLite 数据库初始化失败", zap.Error(err))
+		logger.Warn("CSV 存储初始化失败", zap.Error(err))
 	} else {
-		logger.Info("SQLite 数据库初始化成功")
+		logger.Info("CSV 存储初始化成功")
 
-		// 检查数据库中的历史记录数
+		// 检查历史记录数
 		count, err := storage.GetTotalExecutionCount()
 		if err != nil {
 			logger.Warn("Failed to get execution count", zap.Error(err))
@@ -126,6 +126,7 @@ func runTests(paths []string) {
 			logger.Info("Historical execution records found", zap.Int("count", count))
 		}
 	}
+
 
 	// 如果未指定路径，使用默认测试用例目录
 	if len(paths) == 0 {

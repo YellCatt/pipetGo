@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/bmatcuk/doublestar/v4 v4.6.1
 	github.com/go-resty/resty/v2 v2.12.0
-	github.com/ncruces/go-sqlite3 v0.35.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.19.0
 	github.com/tidwall/gjson v1.14.4
@@ -18,8 +17,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	github.com/ncruces/go-sqlite3-wasm/v3 v3.2.35303 // indirect
-	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
