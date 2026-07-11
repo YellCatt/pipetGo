@@ -844,7 +844,7 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 }
 
 // PrintSummary 打印测试摘要（排除全局前置/后置条件）
-// 同一个文件中全为 chain_ 的用例按 1 个链式用例聚合统计
+// 同一个文件中存在 chain_ 用例的按 1 个链式用例聚合统计
 // results: 测试结果列表
 func PrintSummary(results []TestResult) {
 	var passed, failed, skipped int
