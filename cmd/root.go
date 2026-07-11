@@ -71,10 +71,11 @@ func initConfig() {
 	// 加载用户自定义变量（支持任意变量名）
 	if len(config.AppConfig.Vars) > 0 {
 		vars.InitFromConfig(config.AppConfig.Vars)
-		logger.Info("用户自定义变量加载完成", zap.Any("vars", maskVars(config.AppConfig.Vars)))
+		logger.Info("用户自定义变量加载完成", zap.Int("count", len(config.AppConfig.Vars)), zap.Any("vars", maskVars(config.AppConfig.Vars)))
 	} else {
 		logger.Info("未配置用户自定义变量")
 	}
+	logger.Info("当前可用变量", zap.Any("vars", vars.GetAll()))
 
 	email.InitEmail(email.EmailConfig{
 		Enabled:    config.AppConfig.Email.Enabled,

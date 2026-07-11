@@ -7,7 +7,11 @@ import (
 	"strings"
 
 	"github.com/tidwall/gjson"
+	"go.uber.org/zap"
+
+	"pipetGo/internal/logger"
 )
+
 
 func BodyRegexMatch(body string, pattern string) (bool, string) {
 	if pattern == "" {
@@ -210,9 +214,12 @@ func ExtractVariables(responseBody string, extractExpr string) (map[string]strin
 	result := make(map[string]string)
 	parts := strings.Split(extractExpr, ",")
 
+	logger.Info("开始提取变量", zap.String("extractExpr", extractExpr), zap.String("responseBody", responseBody))
+
 	for _, part := range parts {
 		kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
 		if len(kv) != 2 {
+			logger.Warn("extract 表达式格式错误，跳过", zap.String("part", part))
 			continue
 		}
 
@@ -224,10 +231,22 @@ func ExtractVariables(responseBody string, extractExpr string) (map[string]strin
 		value := gjson.Get(responseBody, path)
 		if value.Exists() {
 			result[key] = value.String()
+			logger.Info("变量提取成功", zap.String("key", key), zap.String("path", path), zap.String("value", maskValue(value.String())))
+		} else {
+			logger.Warn("变量提取失败，路径不存在", zap.String("key", key), zap.String("path", path))
 		}
 	}
 
+	logger.Info("变量提取完成", zap.Any("result", result))
 	return result, nil
+}
+
+// maskValue 对长度较长的值做掩码，避免日志泄露完整 token
+func maskValue(s string) string {
+	if len(s) <= 12 {
+		return s
+	}
+	return s[:6] + "***" + s[len(s)-6:]
 }
 
 func BuildAggregatedResult(aggregatedContent string, chunkCount int) string {

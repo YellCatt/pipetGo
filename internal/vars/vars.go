@@ -6,7 +6,12 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"go.uber.org/zap"
+
+	"pipetGo/internal/logger"
 )
+
 
 // vars 存储全局变量，使用 map 实现
 var (
@@ -61,13 +66,28 @@ func Replace(text string) string {
 	}
 
 	re := regexp.MustCompile(`\{\{(\w+)\}\}`)
-	return re.ReplaceAllStringFunc(text, func(match string) string {
+	result := re.ReplaceAllStringFunc(text, func(match string) string {
 		key := strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}")
 		if value, ok := vars[key]; ok {
+			logger.Debug("变量替换命中", zap.String("key", key), zap.String("value", maskValue(value)))
 			return value
 		}
+		logger.Debug("变量未找到，保留原样", zap.String("key", key), zap.String("text", text))
 		return match
 	})
+
+	if result != text {
+		logger.Debug("Replace 完成", zap.String("before", text), zap.String("after", maskValue(result)))
+	}
+	return result
+}
+
+// maskValue 对长度较长的值做掩码，避免日志泄露完整 token
+func maskValue(s string) string {
+	if len(s) <= 12 {
+		return s
+	}
+	return s[:6] + "***" + s[len(s)-6:]
 }
 
 // InitFromConfig 从配置初始化变量

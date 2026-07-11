@@ -133,8 +133,10 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 		executePostConditions(tc.Post)
 	}
 
-	// 清理当前测试用例提取的变量（默认清理，除非设置 keep_vars=true，或被其他用例作为前置条件依赖）
-	if !tc.KeepVars && tc.Extract != "" && !isUsedAsPreCondition(tc.ID) {
+	// 清理当前测试用例提取的变量（默认清理，除非设置 keep_vars=true，或被其他用例作为前置条件依赖，或是全局前置/后置条件）
+	shouldCleanup := !tc.KeepVars && tc.Extract != "" && !isUsedAsPreCondition(tc.ID) && !IsSetupTestCase(tc)
+	logger.Info("变量清理决策", zap.String("test", tc.ID), zap.Bool("shouldCleanup", shouldCleanup), zap.Bool("KeepVars", tc.KeepVars), zap.String("Extract", tc.Extract), zap.Bool("isUsedAsPreCondition", isUsedAsPreCondition(tc.ID)), zap.Bool("IsSetupTestCase", IsSetupTestCase(tc)))
+	if shouldCleanup {
 		extractParts := strings.Split(tc.Extract, ",")
 		globalVarsMu.Lock()
 		for _, part := range extractParts {
@@ -195,7 +197,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	}
 
 	// 变量替换：将 {{var}} 替换为实际值
-	logger.Debug("变量替换前",
+	logger.Info("变量替换前",
 		zap.String("URL", tc.URL),
 		zap.Any("Headers", tc.Headers),
 		zap.String("Body", tc.Body),
@@ -209,11 +211,13 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	processedBody := vars.Replace(tc.Body)
 	processedJSON := vars.Replace(tc.JSON)
 
-	logger.Debug("变量替换后",
+	logger.Info("变量替换后",
 		zap.String("processedURL", processedURL),
 		zap.Any("processedHeaders", processedHeaders),
 		zap.String("processedBody", processedBody),
 		zap.String("processedJSON", processedJSON))
+	logger.Info("当前全局变量", zap.Any("vars", vars.GetAll()))
+
 
 	// 构建请求体（用于报告记录）
 	var requestBody string
@@ -697,7 +701,6 @@ func isChainFileByResults(results []TestResult) bool {
 	return false
 }
 
-
 // FilterIndependentTests 过滤独立测试用例（ID不以chain_开头的）
 // testCases: 测试用例列表
 // 返回: 独立测试用例列表
@@ -942,7 +945,6 @@ func PrintSummary(results []TestResult) {
 			failed++
 		}
 	}
-
 
 	// 打印汇总信息
 	fmt.Println()
