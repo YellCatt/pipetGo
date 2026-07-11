@@ -150,9 +150,10 @@ func runTests(paths []string) {
 		}
 	}
 
-	// 保存原始测试用例总数（过滤前），按单个用例计数
+	// 保存原始测试用例总数（过滤前），链式文件按 1 个计数
 	totalTestCaseCount := testcase.CountStatisticalTestCases(testCases)
-	totalChainCount := testcase.CountChainTestCases(testCases)
+	totalChainFiles := testcase.GetChainFiles(testCases)
+	totalChainCount := len(totalChainFiles)
 	totalIndependentCount := totalTestCaseCount - totalChainCount
 
 	// 根据标签过滤测试用例
@@ -181,24 +182,25 @@ func runTests(paths []string) {
 
 	// 打印本次执行的测试用例统计信息
 	executedCount := testcase.CountStatisticalTestCases(testCases)
-	executedChainCount := testcase.CountChainTestCases(testCases)
+	executedChainFiles := testcase.GetChainFiles(testCases)
+	executedChainCount := len(executedChainFiles)
 	executedIndependentCount := executedCount - executedChainCount
 
 	fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
 	fmt.Printf("║ 测试用例统计信息                                       ║\n")
 	fmt.Printf("╠════════════════════════════════════════════════════════╣\n")
 	fmt.Printf("║ 解析出的测试用例总数: %-35d║\n", totalTestCaseCount)
-	fmt.Printf("║   链式测试用例: %-41d║\n", totalChainCount)
-	fmt.Printf("║   独立测试用例: %-41d║\n", totalIndependentCount)
+	fmt.Printf("║   链式测试: %-43d║\n", totalChainCount)
+	fmt.Printf("║   独立测试: %-43d║\n", totalIndependentCount)
 	if len(tags) > 0 {
 		fmt.Printf("║ 应用标签过滤: %-40s║\n", strings.Join(tags, ", "))
 		fmt.Printf("║ 过滤后实际执行数: %-36d║\n", executedCount)
-		fmt.Printf("║   链式测试用例: %-41d║\n", executedChainCount)
-		fmt.Printf("║   独立测试用例: %-41d║\n", executedIndependentCount)
+		fmt.Printf("║   链式测试: %-43d║\n", executedChainCount)
+		fmt.Printf("║   独立测试: %-43d║\n", executedIndependentCount)
 	} else {
 		fmt.Printf("║ 未应用标签过滤，本次共执行 %-27d║\n", executedCount)
-		fmt.Printf("║   链式测试用例: %-41d║\n", executedChainCount)
-		fmt.Printf("║   独立测试用例: %-41d║\n", executedIndependentCount)
+		fmt.Printf("║   链式测试: %-43d║\n", executedChainCount)
+		fmt.Printf("║   独立测试: %-43d║\n", executedIndependentCount)
 	}
 
 	fmt.Printf("╠════════════════════════════════════════════════════════╣\n")
