@@ -141,11 +141,14 @@ func GenerateTestReportContent(results []testcase.TestResult) string {
 	var independentPassed, independentFailed, independentSkipped int
 	var totalDuration time.Duration
 
-	for _, r := range results {
+	// 按文件聚合链式结果，与控制台摘要统计保持一致
+	aggregated := testcase.AggregateResultsByFile(results)
+
+	for _, r := range aggregated {
 		totalDuration += r.Duration
-		
+
 		isChain := testcase.IsChainTestCase(r.TestCase)
-		
+
 		if r.TestCase.Skip {
 			totalSkipped++
 			if isChain {
@@ -198,13 +201,13 @@ func GenerateTestReportContent(results []testcase.TestResult) string {
 	}
 	sb.WriteString("\n")
 
-	if len(results) > 0 {
+	if len(aggregated) > 0 {
 		sb.WriteString("测试详情:\n")
 		sb.WriteString("-" + strings.Repeat("-", 78) + "\n")
 		sb.WriteString(fmt.Sprintf("%-15s %-40s %-10s %-15s %s\n", "ID", "描述", "状态", "耗时", "错误信息"))
 		sb.WriteString("-" + strings.Repeat("-", 78) + "\n")
 
-		for _, r := range results {
+		for _, r := range aggregated {
 			if !r.Passed && !r.TestCase.Skip {
 				sb.WriteString(fmt.Sprintf("%-15s %-40s %-10s %-15v %s\n",
 					r.TestCase.ID,
@@ -250,7 +253,7 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 }
 
 // SendTestStartEmail 发送测试开始通知邮件
-func SendTestStartEmail(testCaseCount int, estimatedDuration string) error {
+func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimatedDuration string) error {
 	if !Config.Enabled {
 		log.Println("邮件发送功能已禁用，跳过邮件发送")
 		return nil
@@ -268,7 +271,9 @@ func SendTestStartEmail(testCaseCount int, estimatedDuration string) error {
 	body.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(timeutil.Now())))
 	body.WriteString(fmt.Sprintf("测试设备: %s\n", getDeviceName()))
 	body.WriteString(fmt.Sprintf("\n测试用例统计:\n"))
-	body.WriteString(fmt.Sprintf("  本次测试用例数: %d\n", testCaseCount))
+	body.WriteString(fmt.Sprintf("  本次测试用例总数: %d\n", testCaseCount))
+	body.WriteString(fmt.Sprintf("  链式测试: %d\n", chainCount))
+	body.WriteString(fmt.Sprintf("  独立测试: %d\n", independentCount))
 	body.WriteString(fmt.Sprintf("\n预估执行时间: %s\n", estimatedDuration))
 	body.WriteString("\n===== 通知结束 =====\n")
 	body.WriteString("来自 pipetGo 测试程序")

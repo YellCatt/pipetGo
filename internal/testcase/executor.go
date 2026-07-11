@@ -512,7 +512,8 @@ func GetTestCaseType(tc psv.TestCase) string {
 }
 
 // CountStatisticalTestCases 按文件统计测试用例数
-// 同一个文件中所有用例 ID 都以 chain_ 开头时，该文件计为 1 个用例
+// 如果文件中存在 ID 以 chain 开头的用例，则该文件计为 1 个链式测试
+// 否则按文件内的独立用例数计数
 func CountStatisticalTestCases(testCases []psv.TestCase) int {
 	byFile := groupByFile(testCases)
 	count := 0
@@ -521,6 +522,17 @@ func CountStatisticalTestCases(testCases []psv.TestCase) int {
 			count++
 		} else {
 			count += len(cases)
+		}
+	}
+	return count
+}
+
+// CountChainTestCases 统计 ID 以 chain 开头的测试用例数（按步骤）
+func CountChainTestCases(testCases []psv.TestCase) int {
+	count := 0
+	for _, tc := range testCases {
+		if IsChainTestCase(tc) {
+			count++
 		}
 	}
 	return count
@@ -547,22 +559,20 @@ func groupByFile(testCases []psv.TestCase) map[string][]psv.TestCase {
 	return groups
 }
 
-// isChainFile 判断文件是否全部为链式测试用例
+// isChainFile 判断文件是否为链式测试文件
+// 只要文件中存在 ID 以 chain 开头的用例，即视为链式测试文件
 func isChainFile(testCases []psv.TestCase) bool {
-	if len(testCases) == 0 {
-		return false
-	}
 	for _, tc := range testCases {
-		if !IsChainTestCase(tc) {
-			return false
+		if IsChainTestCase(tc) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
-// aggregateResultsByFile 按文件聚合测试结果
-// 对于全为 chain_ 的文件，整体计为 1 个结果：任一非跳过步骤失败则整体失败
-func aggregateResultsByFile(results []TestResult) []TestResult {
+// AggregateResultsByFile 按文件聚合测试结果
+// 如果文件中存在 ID 以 chain 开头的用例，则整体计为 1 个链式结果：任一非跳过步骤失败则整体失败
+func AggregateResultsByFile(results []TestResult) []TestResult {
 	byFile := make(map[string][]TestResult)
 	for _, r := range results {
 		byFile[r.TestCase.FileName] = append(byFile[r.TestCase.FileName], r)
@@ -574,16 +584,8 @@ func aggregateResultsByFile(results []TestResult) []TestResult {
 			continue
 		}
 
-		// 文件内所有用例 ID 都以 chain_ 开头才聚合
-		allChain := true
-		for _, r := range fileResults {
-			if !IsChainTestCase(r.TestCase) {
-				allChain = false
-				break
-			}
-		}
-
-		if !allChain {
+		// 文件内存在 chain 用例则视为链式文件，整体聚合为 1 个结果
+		if !isChainFileByResults(fileResults) {
 			aggregated = append(aggregated, fileResults...)
 			continue
 		}
@@ -617,6 +619,16 @@ func aggregateResultsByFile(results []TestResult) []TestResult {
 		aggregated = append(aggregated, agg)
 	}
 	return aggregated
+}
+
+// isChainFileByResults 判断文件是否为链式测试文件（基于结果）
+func isChainFileByResults(results []TestResult) bool {
+	for _, r := range results {
+		if IsChainTestCase(r.TestCase) {
+			return true
+		}
+	}
+	return false
 }
 
 
@@ -840,7 +852,7 @@ func PrintSummary(results []TestResult) {
 	var totalDuration time.Duration
 
 	// 按文件聚合链式结果后再统计
-	aggregated := aggregateResultsByFile(results)
+	aggregated := AggregateResultsByFile(results)
 
 	// 统计结果
 	for _, r := range aggregated {
