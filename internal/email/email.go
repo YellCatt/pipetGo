@@ -136,28 +136,67 @@ func GenerateTestReportContent(results []testcase.TestResult) string {
 	sb.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(now)))
 	sb.WriteString(fmt.Sprintf("测试设备: %s\n", getDeviceName()))
 
-	var passed, failed, skipped int
-
+	var totalPassed, totalFailed, totalSkipped int
+	var chainPassed, chainFailed, chainSkipped int
+	var independentPassed, independentFailed, independentSkipped int
 	var totalDuration time.Duration
 
 	for _, r := range results {
 		totalDuration += r.Duration
+		
+		isChain := testcase.IsChainTestCase(r.TestCase)
+		
 		if r.TestCase.Skip {
-			skipped++
+			totalSkipped++
+			if isChain {
+				chainSkipped++
+			} else {
+				independentSkipped++
+			}
 		} else if r.Passed {
-			passed++
+			totalPassed++
+			if isChain {
+				chainPassed++
+			} else {
+				independentPassed++
+			}
 		} else {
-			failed++
+			totalFailed++
+			if isChain {
+				chainFailed++
+			} else {
+				independentFailed++
+			}
 		}
 	}
 
 	sb.WriteString(fmt.Sprintf("测试统计:\n"))
-	sb.WriteString(fmt.Sprintf("  总测试数: %d\n", passed+failed+skipped))
-	sb.WriteString(fmt.Sprintf("  通过数:   %d\n", passed))
-	sb.WriteString(fmt.Sprintf("  失败数:   %d\n", failed))
-	sb.WriteString(fmt.Sprintf("  跳过数:   %d\n", skipped))
-	sb.WriteString(fmt.Sprintf("  通过率:   %.2f%%\n", float64(passed)/float64(passed+failed)*100))
+	sb.WriteString(fmt.Sprintf("  总测试数: %d\n", totalPassed+totalFailed+totalSkipped))
+	sb.WriteString(fmt.Sprintf("  通过数:   %d\n", totalPassed))
+	sb.WriteString(fmt.Sprintf("  失败数:   %d\n", totalFailed))
+	sb.WriteString(fmt.Sprintf("  跳过数:   %d\n", totalSkipped))
+	sb.WriteString(fmt.Sprintf("  通过率:   %.2f%%\n", float64(totalPassed)/float64(totalPassed+totalFailed)*100))
 	sb.WriteString(fmt.Sprintf("  总耗时:   %v\n\n", totalDuration))
+
+	sb.WriteString(fmt.Sprintf("单例测试统计:\n"))
+	sb.WriteString(fmt.Sprintf("  测试数:   %d\n", independentPassed+independentFailed+independentSkipped))
+	sb.WriteString(fmt.Sprintf("  通过数:   %d\n", independentPassed))
+	sb.WriteString(fmt.Sprintf("  失败数:   %d\n", independentFailed))
+	sb.WriteString(fmt.Sprintf("  跳过数:   %d\n", independentSkipped))
+	if independentPassed+independentFailed > 0 {
+		sb.WriteString(fmt.Sprintf("  通过率:   %.2f%%\n", float64(independentPassed)/float64(independentPassed+independentFailed)*100))
+	}
+	sb.WriteString("\n")
+
+	sb.WriteString(fmt.Sprintf("链式测试统计:\n"))
+	sb.WriteString(fmt.Sprintf("  测试数:   %d\n", chainPassed+chainFailed+chainSkipped))
+	sb.WriteString(fmt.Sprintf("  通过数:   %d\n", chainPassed))
+	sb.WriteString(fmt.Sprintf("  失败数:   %d\n", chainFailed))
+	sb.WriteString(fmt.Sprintf("  跳过数:   %d\n", chainSkipped))
+	if chainPassed+chainFailed > 0 {
+		sb.WriteString(fmt.Sprintf("  通过率:   %.2f%%\n", float64(chainPassed)/float64(chainPassed+chainFailed)*100))
+	}
+	sb.WriteString("\n")
 
 	if len(results) > 0 {
 		sb.WriteString("测试详情:\n")
