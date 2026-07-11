@@ -149,11 +149,12 @@ func runTests(paths []string) {
 		}
 	}
 
-	// 保存原始测试用例总数（过滤前）
-	totalTestCaseCount := len(testCases)
+	// 保存原始测试用例总数（过滤前），链式文件按 1 个计数
+	totalTestCaseCount := testcase.CountStatisticalTestCases(testCases)
 
 	// 根据标签过滤测试用例
 	testCases = testcase.FilterByTags(testCases, tags)
+
 
 	// 如果没有测试用例，直接返回
 	if len(testCases) == 0 {
@@ -180,22 +181,25 @@ func runTests(paths []string) {
 	fmt.Printf("║ 测试用例统计信息                                       ║\n")
 	fmt.Printf("╠════════════════════════════════════════════════════════╣\n")
 	fmt.Printf("║ 解析出的测试用例总数: %d                                ║\n", totalTestCaseCount)
+	executedCount := testcase.CountStatisticalTestCases(testCases)
 	if len(tags) > 0 {
 		fmt.Printf("║ 应用标签过滤: %s                                       ║\n", strings.Join(tags, ", "))
-		fmt.Printf("║ 过滤后实际执行数: %d                                   ║\n", len(testCases))
+		fmt.Printf("║ 过滤后实际执行数: %d                                   ║\n", executedCount)
 	} else {
-		fmt.Printf("║ 未应用标签过滤，本次共执行 %d 个测试用例                  ║\n", len(testCases))
+		fmt.Printf("║ 未应用标签过滤，本次共执行 %d 个测试用例                  ║\n", executedCount)
 	}
+
 	fmt.Printf("╠════════════════════════════════════════════════════════╣\n")
 	fmt.Printf("║ 预估执行时间: %s                                        ║\n", estimatedDurationStr)
 	fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
 
 	// 发送测试开始通知邮件
 	go func() {
-		if err := email.SendTestStartEmail(len(testCases), estimatedDurationStr); err != nil {
+		if err := email.SendTestStartEmail(executedCount, estimatedDurationStr); err != nil {
 			logger.Warn("Failed to send test start email", zap.Error(err))
 		}
 	}()
+
 
 	// 生成报告时间戳（测试开始时生成，后续更新报告时使用同一个时间戳）
 	reportTimestamp := timeutil.FormatCompact(timeutil.Now())
@@ -231,14 +235,20 @@ func runTests(paths []string) {
 
 	// 运行测试（串行执行），每完成一个测试就更新一次报告
 	var results []testcase.TestResult
+	chainFiles := testcase.GetChainFiles(testCases)
 	for i, tc := range testCases {
 		result := testcase.ExecuteTestCase(tc)
 		results = append(results, result)
 
 		// 每完成一个测试用例就更新一次报告（覆盖同一个文件）
 		fmt.Printf("\n\n────────────────────────────────────────────────────────────\n")
-		fmt.Printf("第 %d/%d 个测试完成，正在更新报告...\n", i+1, len(testCases))
+		stepLabel := "测试"
+		if chainFiles[tc.FileName] {
+			stepLabel = "链式步骤"
+		}
+		fmt.Printf("第 %d/%d 个%s完成，正在更新报告...\n", i+1, len(testCases), stepLabel)
 		fmt.Printf("────────────────────────────────────────────────────────────\n")
+
 
 		// 生成并保存测试报告（使用同一个时间戳，覆盖之前的报告）
 		allReport, errorReport := testcase.GenerateReport(results)

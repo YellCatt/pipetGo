@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -84,6 +85,13 @@ func executePreConditions(preIDs []string) (TestResult, error) {
 	return TestResult{}, nil
 }
 
+// isUsedAsPreCondition 判断指定用例是否被其他用例作为前置条件依赖
+func isUsedAsPreCondition(tcID string) bool {
+	return slices.ContainsFunc(allTestCases, func(tc psv.TestCase) bool {
+		return slices.Contains(tc.Pre, tcID)
+	})
+}
+
 func executePostConditions(postIDs []string) {
 	for _, postID := range postIDs {
 		postTC := findTestCaseByID(postID)
@@ -125,8 +133,8 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 		executePostConditions(tc.Post)
 	}
 
-	// 清理当前测试用例提取的变量（默认清理，除非设置 keep_vars=true）
-	if !tc.KeepVars && tc.Extract != "" {
+	// 清理当前测试用例提取的变量（默认清理，除非设置 keep_vars=true，或被其他用例作为前置条件依赖）
+	if !tc.KeepVars && tc.Extract != "" && !isUsedAsPreCondition(tc.ID) {
 		extractParts := strings.Split(tc.Extract, ",")
 		globalVarsMu.Lock()
 		for _, part := range extractParts {
@@ -469,7 +477,7 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 // tc: 测试用例
 // 返回: 是否为链式测试
 func IsChainTestCase(tc psv.TestCase) bool {
-	return strings.HasPrefix(tc.ID, "chain_")
+	return strings.HasPrefix(tc.ID, "chain")
 }
 
 // IsGlobalPreCondition 判断是否为全局前置条件测试用例（通过ID前缀判断）
@@ -502,6 +510,115 @@ func GetTestCaseType(tc psv.TestCase) string {
 	}
 	return "independent"
 }
+
+// CountStatisticalTestCases 按文件统计测试用例数
+// 同一个文件中所有用例 ID 都以 chain_ 开头时，该文件计为 1 个用例
+func CountStatisticalTestCases(testCases []psv.TestCase) int {
+	byFile := groupByFile(testCases)
+	count := 0
+	for _, cases := range byFile {
+		if isChainFile(cases) {
+			count++
+		} else {
+			count += len(cases)
+		}
+	}
+	return count
+}
+
+// GetChainFiles 返回所有全为链式用例的文件名集合
+func GetChainFiles(testCases []psv.TestCase) map[string]bool {
+	byFile := groupByFile(testCases)
+	chainFiles := make(map[string]bool)
+	for file, cases := range byFile {
+		if isChainFile(cases) {
+			chainFiles[file] = true
+		}
+	}
+	return chainFiles
+}
+
+// groupByFile 按文件名分组测试用例
+func groupByFile(testCases []psv.TestCase) map[string][]psv.TestCase {
+	groups := make(map[string][]psv.TestCase)
+	for _, tc := range testCases {
+		groups[tc.FileName] = append(groups[tc.FileName], tc)
+	}
+	return groups
+}
+
+// isChainFile 判断文件是否全部为链式测试用例
+func isChainFile(testCases []psv.TestCase) bool {
+	if len(testCases) == 0 {
+		return false
+	}
+	for _, tc := range testCases {
+		if !IsChainTestCase(tc) {
+			return false
+		}
+	}
+	return true
+}
+
+// aggregateResultsByFile 按文件聚合测试结果
+// 对于全为 chain_ 的文件，整体计为 1 个结果：任一非跳过步骤失败则整体失败
+func aggregateResultsByFile(results []TestResult) []TestResult {
+	byFile := make(map[string][]TestResult)
+	for _, r := range results {
+		byFile[r.TestCase.FileName] = append(byFile[r.TestCase.FileName], r)
+	}
+
+	var aggregated []TestResult
+	for _, fileResults := range byFile {
+		if len(fileResults) == 0 {
+			continue
+		}
+
+		// 文件内所有用例 ID 都以 chain_ 开头才聚合
+		allChain := true
+		for _, r := range fileResults {
+			if !IsChainTestCase(r.TestCase) {
+				allChain = false
+				break
+			}
+		}
+
+		if !allChain {
+			aggregated = append(aggregated, fileResults...)
+			continue
+		}
+
+		first := fileResults[0]
+		agg := TestResult{
+			TestCase:  first.TestCase,
+			StartTime: first.StartTime,
+			EndTime:   first.EndTime,
+			Passed:    true,
+		}
+		allSkipped := true
+		for _, r := range fileResults {
+			if r.EndTime.After(agg.EndTime) {
+				agg.EndTime = r.EndTime
+			}
+			agg.Duration += r.Duration
+			if !r.TestCase.Skip {
+				allSkipped = false
+				if !r.Passed {
+					agg.Passed = false
+					if agg.Error == "" {
+						agg.Error = r.Error
+					}
+				}
+			}
+		}
+		if allSkipped {
+			agg.TestCase.Skip = true
+		}
+		aggregated = append(aggregated, agg)
+	}
+	return aggregated
+}
+
 
 // FilterIndependentTests 过滤独立测试用例（ID不以chain_开头的）
 // testCases: 测试用例列表
@@ -715,14 +832,18 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 }
 
 // PrintSummary 打印测试摘要（排除全局前置/后置条件）
+// 同一个文件中全为 chain_ 的用例按 1 个链式用例聚合统计
 // results: 测试结果列表
 func PrintSummary(results []TestResult) {
 	var passed, failed, skipped int
 	var setupPassed, setupFailed int
 	var totalDuration time.Duration
 
+	// 按文件聚合链式结果后再统计
+	aggregated := aggregateResultsByFile(results)
+
 	// 统计结果
-	for _, r := range results {
+	for _, r := range aggregated {
 		totalDuration += r.Duration
 
 		// 排除全局前置/后置条件
@@ -743,6 +864,7 @@ func PrintSummary(results []TestResult) {
 			failed++
 		}
 	}
+
 
 	// 打印汇总信息
 	fmt.Println()
