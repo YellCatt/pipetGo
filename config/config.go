@@ -50,6 +50,7 @@ type TestConfig struct {
 	SevereStatus  []int    `mapstructure:"severe_status"`  // 严重错误状态码列表，这些状态码的测试用例失败时优先于其他失败用例
 	GlobalPre     []string `mapstructure:"global_pre"`     // 全局前置条件测试用例ID列表（所有测试执行前运行）
 	GlobalPost    []string `mapstructure:"global_post"`    // 全局后置条件测试用例ID列表（所有测试执行后运行）
+	DeviceName    string   `mapstructure:"device_name"`    // 测试设备名称（未配置时自动使用主机名）
 }
 
 // EmailConfig 表示邮件发送相关的配置

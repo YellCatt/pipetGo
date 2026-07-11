@@ -83,6 +83,7 @@ func initConfig() {
 		AuthCode:   config.AppConfig.Email.AuthCode,
 		SMTPServer: config.AppConfig.Email.SMTPServer,
 		SMTPPort:   config.AppConfig.Email.SMTPPort,
+		DeviceName: config.AppConfig.Test.DeviceName,
 	})
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/smtp"
+	"os"
 	"strings"
 	"time"
 
@@ -20,12 +21,25 @@ type EmailConfig struct {
 	AuthCode   string
 	SMTPServer string
 	SMTPPort   int
+	DeviceName string
 }
 
 var Config EmailConfig
 
 func InitEmail(cfg EmailConfig) {
 	Config = cfg
+}
+
+// getDeviceName 获取设备名称，优先使用配置值，未配置时自动获取主机名
+func getDeviceName() string {
+	if Config.DeviceName != "" {
+		return Config.DeviceName
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "未知设备"
+	}
+	return hostname
 }
 
 func formatSubject(subject string) string {
@@ -120,6 +134,7 @@ func GenerateTestReportContent(results []testcase.TestResult) string {
 
 	sb.WriteString(fmt.Sprintf("===== 测试报告 =====\n\n"))
 	sb.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(now)))
+	sb.WriteString(fmt.Sprintf("测试设备: %s\n", getDeviceName()))
 
 	var passed, failed, skipped int
 
@@ -187,7 +202,7 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 	}
 
 	// 使用东八区时间
-	subject := fmt.Sprintf("【测试报告】pipetGo - %s", timeutil.FormatDateTime(timeutil.Now()))
+	subject := fmt.Sprintf("【测试报告】pipetGo - %s - %s", getDeviceName(), timeutil.FormatDateTime(timeutil.Now()))
 
 	body := GenerateTestReportContent(results)
 
@@ -207,11 +222,12 @@ func SendTestStartEmail(testCaseCount int, estimatedDuration string) error {
 	}
 
 	// 使用东八区时间
-	subject := fmt.Sprintf("【测试开始】pipetGo - %s", timeutil.FormatDateTime(timeutil.Now()))
+	subject := fmt.Sprintf("【测试开始】pipetGo - %s - %s", getDeviceName(), timeutil.FormatDateTime(timeutil.Now()))
 
 	var body strings.Builder
 	body.WriteString("===== 测试开始通知 =====\n\n")
 	body.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(timeutil.Now())))
+	body.WriteString(fmt.Sprintf("测试设备: %s\n", getDeviceName()))
 	body.WriteString(fmt.Sprintf("\n测试用例统计:\n"))
 	body.WriteString(fmt.Sprintf("  本次测试用例数: %d\n", testCaseCount))
 	body.WriteString(fmt.Sprintf("\n预估执行时间: %s\n", estimatedDuration))
