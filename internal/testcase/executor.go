@@ -527,15 +527,74 @@ func CountStatisticalTestCases(testCases []psv.TestCase) int {
 	return count
 }
 
-// CountChainTestCases 统计 ID 以 chain 开头的测试用例数（按步骤）
-func CountChainTestCases(testCases []psv.TestCase) int {
-	count := 0
-	for _, tc := range testCases {
-		if IsChainTestCase(tc) {
-			count++
+// CountTestSummary 统计测试用例摘要
+// 返回：总用例数、链式测试文件数、独立测试用例数
+// 链式文件判断标准：文件中存在 ID 以 chain 开头的用例
+func CountTestSummary(testCases []psv.TestCase) (total, chain, independent int) {
+	byFile := groupByFile(testCases)
+	for _, cases := range byFile {
+		if isChainFile(cases) {
+			chain++
+			total++
+		} else {
+			independent += len(cases)
+			total += len(cases)
 		}
 	}
-	return count
+	return
+}
+
+// SummarizeResultsByType 按链式/独立分类统计测试结果
+// 返回：链式通过/失败/跳过数、独立通过/失败/跳过数、总耗时
+func SummarizeResultsByType(results []TestResult) (chainPassed, chainFailed, chainSkipped, independentPassed, independentFailed, independentSkipped int, totalDuration time.Duration) {
+	aggregated := AggregateResultsByFile(results)
+	for _, r := range aggregated {
+		totalDuration += r.Duration
+		isChain := IsChainTestCase(r.TestCase)
+		if r.TestCase.Skip {
+			if isChain {
+				chainSkipped++
+			} else {
+				independentSkipped++
+			}
+		} else if r.Passed {
+			if isChain {
+				chainPassed++
+			} else {
+				independentPassed++
+			}
+		} else {
+			if isChain {
+				chainFailed++
+			} else {
+				independentFailed++
+			}
+		}
+	}
+	return
+}
+
+// SummarizeResults 统计测试结果摘要
+// 返回：总用例数、链式测试文件数、独立测试用例数、通过/失败/跳过数、总耗时
+func SummarizeResults(results []TestResult) (total, chain, independent, passed, failed, skipped int, totalDuration time.Duration) {
+	aggregated := AggregateResultsByFile(results)
+	for _, r := range aggregated {
+		totalDuration += r.Duration
+		if IsChainTestCase(r.TestCase) {
+			chain++
+		} else {
+			independent++
+		}
+		total++
+		if r.TestCase.Skip {
+			skipped++
+		} else if r.Passed {
+			passed++
+		} else {
+			failed++
+		}
+	}
+	return
 }
 
 // GetChainFiles 返回所有全为链式用例的文件名集合
@@ -591,6 +650,13 @@ func AggregateResultsByFile(results []TestResult) []TestResult {
 		}
 
 		first := fileResults[0]
+		// 链式文件的代表用例应优先选择第一个 chain 用例，确保后续按 ID 判断类型正确
+		for _, r := range fileResults {
+			if IsChainTestCase(r.TestCase) {
+				first = r
+				break
+			}
+		}
 		agg := TestResult{
 			TestCase:  first.TestCase,
 			StartTime: first.StartTime,

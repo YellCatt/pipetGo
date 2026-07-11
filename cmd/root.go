@@ -151,10 +151,7 @@ func runTests(paths []string) {
 	}
 
 	// 保存原始测试用例总数（过滤前），链式文件按 1 个计数
-	totalTestCaseCount := testcase.CountStatisticalTestCases(testCases)
-	totalChainFiles := testcase.GetChainFiles(testCases)
-	totalChainCount := len(totalChainFiles)
-	totalIndependentCount := totalTestCaseCount - totalChainCount
+	totalTestCaseCount, totalChainCount, totalIndependentCount := testcase.CountTestSummary(testCases)
 
 	// 根据标签过滤测试用例
 	testCases = testcase.FilterByTags(testCases, tags)
@@ -181,10 +178,7 @@ func runTests(paths []string) {
 	}
 
 	// 打印本次执行的测试用例统计信息
-	executedCount := testcase.CountStatisticalTestCases(testCases)
-	executedChainFiles := testcase.GetChainFiles(testCases)
-	executedChainCount := len(executedChainFiles)
-	executedIndependentCount := executedCount - executedChainCount
+	executedCount, executedChainCount, executedIndependentCount := testcase.CountTestSummary(testCases)
 
 	fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
 	fmt.Printf("║ 测试用例统计信息                                       ║\n")

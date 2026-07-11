@@ -136,42 +136,17 @@ func GenerateTestReportContent(results []testcase.TestResult) string {
 	sb.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(now)))
 	sb.WriteString(fmt.Sprintf("测试设备: %s\n", getDeviceName()))
 
-	var totalPassed, totalFailed, totalSkipped int
-	var chainPassed, chainFailed, chainSkipped int
-	var independentPassed, independentFailed, independentSkipped int
 	var totalDuration time.Duration
 
-	// 按文件聚合链式结果，与控制台摘要统计保持一致
+	// 使用统一的统计函数，与测试开始邮件口径一致
+	chainPassed, chainFailed, chainSkipped, independentPassed, independentFailed, independentSkipped, totalDuration := testcase.SummarizeResultsByType(results)
+
+	totalPassed := chainPassed + independentPassed
+	totalFailed := chainFailed + independentFailed
+	totalSkipped := chainSkipped + independentSkipped
+
+	// 聚合结果用于失败详情展示
 	aggregated := testcase.AggregateResultsByFile(results)
-
-	for _, r := range aggregated {
-		totalDuration += r.Duration
-
-		isChain := testcase.IsChainTestCase(r.TestCase)
-
-		if r.TestCase.Skip {
-			totalSkipped++
-			if isChain {
-				chainSkipped++
-			} else {
-				independentSkipped++
-			}
-		} else if r.Passed {
-			totalPassed++
-			if isChain {
-				chainPassed++
-			} else {
-				independentPassed++
-			}
-		} else {
-			totalFailed++
-			if isChain {
-				chainFailed++
-			} else {
-				independentFailed++
-			}
-		}
-	}
 
 	sb.WriteString(fmt.Sprintf("测试统计:\n"))
 	sb.WriteString(fmt.Sprintf("  总测试数: %d\n", totalPassed+totalFailed+totalSkipped))
