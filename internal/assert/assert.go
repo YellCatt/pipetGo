@@ -218,10 +218,12 @@ func ExtractVariables(responseBody string, extractExpr string) (map[string]strin
 
 		key := strings.TrimSpace(kv[0])
 		path := strings.TrimSpace(kv[1])
+		// 兼容 JSONPath 风格的 $. 前缀；gjson 标准路径不需要 $
+		path = strings.TrimPrefix(path, "$.")
 
 		value := gjson.Get(responseBody, path)
 		if value.Exists() {
-			result[key] = value.Str
+			result[key] = value.String()
 		}
 	}
 
