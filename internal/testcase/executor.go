@@ -465,6 +465,70 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 	return result
 }
 
+// IsChainTestCase 判断是否为链式测试用例（通过ID前缀判断）
+// tc: 测试用例
+// 返回: 是否为链式测试
+func IsChainTestCase(tc psv.TestCase) bool {
+	return strings.HasPrefix(tc.ID, "chain_")
+}
+
+// IsGlobalPreCondition 判断是否为全局前置条件测试用例（通过ID前缀判断）
+// tc: 测试用例
+// 返回: 是否为全局前置条件
+func IsGlobalPreCondition(tc psv.TestCase) bool {
+	return strings.HasPrefix(tc.ID, "pre_")
+}
+
+// IsGlobalPostCondition 判断是否为全局后置条件测试用例（通过ID前缀判断）
+// tc: 测试用例
+// 返回: 是否为全局后置条件
+func IsGlobalPostCondition(tc psv.TestCase) bool {
+	return strings.HasPrefix(tc.ID, "post_")
+}
+
+// IsSetupTestCase 判断是否为环境准备类测试用例（前置/后置条件）
+// tc: 测试用例
+// 返回: 是否为环境准备类测试用例
+func IsSetupTestCase(tc psv.TestCase) bool {
+	return IsGlobalPreCondition(tc) || IsGlobalPostCondition(tc)
+}
+
+// GetTestCaseType 获取测试用例类型
+// tc: 测试用例
+// 返回: "chain" 或 "independent"
+func GetTestCaseType(tc psv.TestCase) string {
+	if IsChainTestCase(tc) {
+		return "chain"
+	}
+	return "independent"
+}
+
+// FilterIndependentTests 过滤独立测试用例（ID不以chain_开头的）
+// testCases: 测试用例列表
+// 返回: 独立测试用例列表
+func FilterIndependentTests(testCases []psv.TestCase) []psv.TestCase {
+	var independent []psv.TestCase
+	for _, tc := range testCases {
+		if !IsChainTestCase(tc) {
+			independent = append(independent, tc)
+		}
+	}
+	return independent
+}
+
+// FilterChainTests 过滤链式测试用例（ID以chain_开头的）
+// testCases: 测试用例列表
+// 返回: 链式测试用例列表
+func FilterChainTests(testCases []psv.TestCase) []psv.TestCase {
+	var chain []psv.TestCase
+	for _, tc := range testCases {
+		if IsChainTestCase(tc) {
+			chain = append(chain, tc)
+		}
+	}
+	return chain
+}
+
 // FilterByTags 根据标签过滤测试用例
 // testCases: 测试用例列表
 // tags: 标签列表
@@ -650,15 +714,27 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 	return allPath, errorPath
 }
 
-// PrintSummary 打印测试摘要
+// PrintSummary 打印测试摘要（排除全局前置/后置条件）
 // results: 测试结果列表
 func PrintSummary(results []TestResult) {
 	var passed, failed, skipped int
+	var setupPassed, setupFailed int
 	var totalDuration time.Duration
 
 	// 统计结果
 	for _, r := range results {
 		totalDuration += r.Duration
+
+		// 排除全局前置/后置条件
+		if IsSetupTestCase(r.TestCase) {
+			if r.Passed {
+				setupPassed++
+			} else {
+				setupFailed++
+			}
+			continue
+		}
+
 		if r.TestCase.Skip {
 			skipped++
 		} else if r.Passed {
@@ -674,6 +750,9 @@ func PrintSummary(results []TestResult) {
 	fmt.Println("║              pipet 接口测试                          ║")
 	fmt.Println("╚══════════════════════════════════════════════════════╝")
 	fmt.Println()
-	fmt.Printf("Total: %d, Passed: %d, Failed: %d, Skipped: %d\n", passed+failed+skipped, passed, failed, skipped)
-	fmt.Printf("Total duration: %.3fs\n", totalDuration.Seconds())
+	fmt.Printf("测试用例: %d 通过, %d 失败, %d 跳过\n", passed, failed, skipped)
+	if setupPassed+setupFailed > 0 {
+		fmt.Printf("环境准备: %d 通过, %d 失败\n", setupPassed, setupFailed)
+	}
+	fmt.Printf("总时长: %.3fs\n", totalDuration.Seconds())
 }
