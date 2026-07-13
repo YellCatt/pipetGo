@@ -151,6 +151,12 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 		globalVarsMu.Unlock()
 	}
 
+	// 执行后延迟（如果设置了 delay_after_ms）
+	if tc.DelayAfterMs > 0 {
+		logger.Info("Waiting after executing test", zap.String("id", tc.ID), zap.Int("delay_after_ms", tc.DelayAfterMs))
+		time.Sleep(time.Duration(tc.DelayAfterMs) * time.Millisecond)
+	}
+
 	return result
 }
 

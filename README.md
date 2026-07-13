@@ -13,9 +13,9 @@
 - 基于标签的测试过滤
 - 变量提取和替换
 - 流式（SSE）断言支持
-- 正则表达式断言支持
+- 正则表达式断言支持（支持匹配数字、布尔等非字符串类型）
 - CSV 历史执行时间存储和平均值计算
-
+- 测试用例延迟控制（执行前/后延迟）
 - 邮件测试报告通知
 
 ## 环境要求
@@ -171,6 +171,10 @@ id|skip|desc|method|url|headers|params|form|json|body|expected_status|expected_b
 | `body_regex` | 响应体的正则表达式模式 |
 | `pre` | 前置条件测试 ID（分号分隔） |
 | `post` | 后置条件测试 ID（分号分隔） |
+| `fail_mode` | 失败模式：`stop`（默认，前置条件失败则停止）或 `continue`（前置条件失败仍继续） |
+| `keep_vars` | 是否保留提取的变量（0/1，默认 0，执行后自动清理） |
+| `delay_ms` | 执行前延迟时间（毫秒），用于控制测试用例执行前的等待时间 |
+| `delay_after_ms` | 执行后延迟时间（毫秒），用于控制当前用例执行完后到下一个用例开始的间隔 |
 
 ### 示例
 
@@ -208,6 +212,7 @@ get_user|0|获取用户|GET|{{base_url}}/users/{{user_id}}|{}|||{}||200|{}|api||
 id|skip|desc|method|url|expected_status|expected_body|tags
 regex_01|0|检查IP格式|GET|{{base_url}}/ip|200|{"origin":"{{regex:^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$}}"}|regex
 regex_02|0|检查无错误|GET|{{base_url}}/status/200|200|{"message":"{{not_regex:error}}"}|regex
+regex_03|0|检查数字类型字段|GET|{{base_url}}/stats|200|{"count":"{{regex:\\d+}}"}|regex
 ```
 
 ### 响应体正则
@@ -218,14 +223,26 @@ body_01|0|确保响应无错误|GET|{{base_url}}/health|200|!error|health
 body_02|0|确保包含成功|GET|{{base_url}}/success|200|success|health
 ```
 
+### 类型兼容说明
+
+正则表达式断言会自动将实际响应值转换为字符串后进行匹配，因此可以匹配任何 JSON 类型：
+
+| 实际值类型 | 转换后字符串 | 正则示例 |
+|-----------|-------------|---------|
+| 字符串 `"8331"` | `"8331"` | `\d+` ✓ |
+| 数字 `8331` | `"8331"` | `\d+` ✓ |
+| 布尔 `true` | `"true"` | `true\|false` ✓ |
+| 布尔 `false` | `"false"` | `true\|false` ✓ |
+| `null` | `"null"` | `null` ✓ |
+
 ### 特殊标记
 
 | 标记 | 描述 |
 |------|------|
-| `{{regex:...}}` | 字段值必须匹配正则表达式 |
-| `{{not_regex:...}}` | 字段值必须不匹配正则表达式 |
+| `{{regex:...}}` | 字段值必须匹配正则表达式（自动转换为字符串） |
+| `{{not_regex:...}}` | 字段值必须不匹配正则表达式（自动转换为字符串） |
 | `{{skip}}` | 跳过此字段检查 |
-| `{{not_exists}}` | 字段必须不存在于响应中 |
+| `{{not_exists}}` | 字段必须不存在于响应中（仅 subset 模式） |
 
 ## 匹配模式
 
@@ -244,6 +261,44 @@ strict_01|0|严格匹配|GET|{{base_url}}/ip|200|{"origin":"{{regex:^[0-9]{1,3}\
 ```psv
 subset_01|0|子集匹配|GET|{{base_url}}/get|200|{"args":{}}|api|subset|
 ```
+
+## 延迟控制
+
+测试用例支持两种延迟方式，用于控制测试执行节奏：
+
+### 执行前延迟（delay_ms）
+
+在测试用例开始执行前等待指定时间：
+
+```psv
+# 等待上游服务就绪后再执行
+query_order|0|查询订单状态|GET|{{base_url}}/api/orders/{{order_id}}|{}|||{}||200||api|||1000||
+```
+
+### 执行后延迟（delay_after_ms）
+
+在测试用例执行完成后等待指定时间，再执行下一个用例：
+
+```psv
+# 给下游服务处理时间
+create_order|0|创建订单|POST|{{base_url}}/api/orders|{}|||{"amount":100}||201||api|order_id=id|||2000
+```
+
+### 同时使用两种延迟
+
+```psv
+# 执行前等待500ms，执行后等待3秒
+complex_operation|0|复杂操作|POST|{{base_url}}/api/complex|{}|||{"data":"test"}||200||api|||500|3000
+```
+
+### 延迟场景建议
+
+| 场景 | 使用字段 | 建议值 |
+|------|---------|-------|
+| 等待上游服务就绪 | `delay_ms` | 1000-3000ms |
+| 避免触发限流 | `delay_ms` 或 `delay_after_ms` | 100-500ms |
+| 给下游服务处理时间 | `delay_after_ms` | 2000-5000ms |
+| 数据库最终一致性 | `delay_after_ms` | 3000-10000ms |
 
 ## 流式断言
 

@@ -53,10 +53,12 @@ type TestCase struct {
 	StreamAssert   []StreamAssert    `mapstructure:"stream_assert"`   // 流式断言规则
 	MatchMode      string            `mapstructure:"match_mode"`      // 匹配模式: exact/subset
 	BodyRegex      string            `mapstructure:"body_regex"`      // 响应体正则表达式
-	Pre        []string          `mapstructure:"pre"`         // 前置条件
-	Post       []string          `mapstructure:"post"`        // 后置条件
-	FailMode   string            `mapstructure:"fail_mode"`   // 失败模式: stop(默认)/continue
-	KeepVars   bool              `mapstructure:"keep_vars"`   // 是否保留提取的变量（默认false，即自动清理）
+	Pre            []string          `mapstructure:"pre"`             // 前置条件
+	Post           []string          `mapstructure:"post"`            // 后置条件
+	FailMode       string            `mapstructure:"fail_mode"`       // 失败模式: stop(默认)/continue
+	KeepVars       bool              `mapstructure:"keep_vars"`       // 是否保留提取的变量（默认false，即自动清理）
+	DelayMs        int               `mapstructure:"delay_ms"`        // 执行前延迟时间（毫秒）
+	DelayAfterMs   int               `mapstructure:"delay_after_ms"`  // 执行后延迟时间（毫秒）
 }
 
 // ParseFile 解析单个PSV文件
@@ -270,6 +272,10 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 			tc.FailMode = value
 		case "keep_vars":
 			tc.KeepVars = value == "1" || strings.EqualFold(value, "true")
+		case "delay_ms":
+			tc.DelayMs = parseInt(value)
+		case "delay_after_ms":
+			tc.DelayAfterMs = parseInt(value)
 		}
 	}
 
