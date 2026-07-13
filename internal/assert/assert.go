@@ -123,24 +123,24 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 
 	if strings.HasPrefix(expectedStr, "{{regex:") && strings.HasSuffix(expectedStr, "}}") {
 		pattern := expectedStr[9 : len(expectedStr)-2]
-		matched, err := regexp.MatchString(pattern, actual.Str)
+		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
 			return false, fmt.Sprintf("invalid regex: %s", err.Error())
 		}
 		if !matched {
-			return false, fmt.Sprintf("value '%s' does not match regex '%s'", actual.Str, pattern)
+			return false, fmt.Sprintf("value '%s' does not match regex '%s'", actual.String(), pattern)
 		}
 		return true, ""
 	}
 
 	if strings.HasPrefix(expectedStr, "{{not_regex:") && strings.HasSuffix(expectedStr, "}}") {
 		pattern := expectedStr[12 : len(expectedStr)-2]
-		matched, err := regexp.MatchString(pattern, actual.Str)
+		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
 			return false, fmt.Sprintf("invalid regex: %s", err.Error())
 		}
 		if matched {
-			return false, fmt.Sprintf("value '%s' should NOT match regex '%s'", actual.Str, pattern)
+			return false, fmt.Sprintf("value '%s' should NOT match regex '%s'", actual.String(), pattern)
 		}
 		return true, ""
 	}
