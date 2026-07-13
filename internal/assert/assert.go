@@ -123,6 +123,7 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 
 	if strings.HasPrefix(expectedStr, "{{regex:") && strings.HasSuffix(expectedStr, "}}") {
 		pattern := expectedStr[9 : len(expectedStr)-2]
+		pattern = fixRegexEscapes(pattern)
 		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
 			return false, fmt.Sprintf("invalid regex: %s", err.Error())
@@ -135,6 +136,7 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 
 	if strings.HasPrefix(expectedStr, "{{not_regex:") && strings.HasSuffix(expectedStr, "}}") {
 		pattern := expectedStr[12 : len(expectedStr)-2]
+		pattern = fixRegexEscapes(pattern)
 		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
 			return false, fmt.Sprintf("invalid regex: %s", err.Error())
@@ -256,4 +258,37 @@ func BuildAggregatedResult(aggregatedContent string, chunkCount int) string {
 	}
 	data, _ := json.Marshal(result)
 	return string(data)
+}
+
+// fixRegexEscapes 修复正则表达式中丢失的反斜杠
+// 当用户在 PSV 文件中写 {{regex:\d+}} 时，经过 JSON 解析后 \d 会变成 d
+// 此函数自动检测并修复常见的正则表达式转义序列
+func fixRegexEscapes(pattern string) string {
+	// 定义正则表达式中常见的转义字符映射
+	// key: 丢失反斜杠后的字符（如 "d"）
+	// value: 正确的转义序列（如 "\\d"）
+	escapeMap := map[string]string{
+		"d": "\\d", // 数字字符类
+		"D": "\\D", // 非数字字符类
+		"w": "\\w", // 单词字符类
+		"W": "\\W", // 非单词字符类
+		"s": "\\s", // 空白字符类
+		"S": "\\S", // 非空白字符类
+		"b": "\\b", // 单词边界
+		"B": "\\B", // 非单词边界
+		"n": "\\n", // 换行符
+		"t": "\\t", // 制表符
+		"r": "\\r", // 回车符
+		".": "\\.", // 字面量点号
+	}
+
+	// 遍历每个需要修复的转义字符
+	for from, to := range escapeMap {
+		// 检查是否存在单独的字符（不在反斜杠后面）
+		// 使用正则表达式匹配：前面不是反斜杠，后面跟着目标字符
+		re := regexp.MustCompile(`([^\\]|^)` + regexp.QuoteMeta(from))
+		pattern = re.ReplaceAllString(pattern, "${1}"+to)
+	}
+
+	return pattern
 }
