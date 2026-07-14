@@ -3,10 +3,12 @@
 package config
 
 import (
+	"fmt"
 	"log"
-	"strings"
+	"os"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 // CfgFile 存储命令行指定的配置文件路径
@@ -91,11 +93,43 @@ func InitConfig() {
 	}
 
 	// 单独读取 vars 配置，保留原始键名（避免 viper 自动转换小写）
-	rawVars := viper.GetStringMapString("vars")
-	if len(rawVars) > 0 {
-		AppConfig.Vars = make(map[string]string)
-		for k, v := range rawVars {
-			AppConfig.Vars[k] = v
+	AppConfig.Vars = loadRawVars()
+}
+
+// loadRawVars 从配置文件读取原始 vars，保留键名大小写。
+// viper 默认会把所有配置键转为小写，因此需要直接解析 YAML 文件来保留原始键名。
+func loadRawVars() map[string]string {
+	result := make(map[string]string)
+
+	// 优先从配置文件读取原始 YAML，保留键名大小写
+	configFile := viper.ConfigFileUsed()
+	if configFile == "" && CfgFile != "" {
+		configFile = CfgFile
+	}
+
+	if configFile != "" {
+		data, err := os.ReadFile(configFile)
+		if err == nil {
+			var raw map[string]any
+			if err := yaml.Unmarshal(data, &raw); err == nil {
+				if varsMap, ok := raw["vars"].(map[string]any); ok {
+					for k, v := range varsMap {
+						switch val := v.(type) {
+						case string:
+							result[k] = val
+						default:
+							result[k] = fmt.Sprintf("%v", val)
+						}
+					}
+					return result
+				}
+			}
 		}
 	}
+
+	// 回退：使用 viper 读取（键名会被转小写）
+	for k, v := range viper.GetStringMapString("vars") {
+		result[k] = v
+	}
+	return result
 }
