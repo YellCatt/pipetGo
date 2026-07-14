@@ -321,12 +321,12 @@ stream_01|0|SSE流式断言|POST|{{base_url}}/chat/completions|{"Content-Type":"
 
 每次运行后，报告会保存到 `reports/` 目录：
 
-- `report_YYYYMMDD_HHMMSS.psv` - 完整测试结果
-- `report_YYYYMMDD_HHMMSS_error.psv` - 仅包含失败的测试用例
+- `report_YYYYMMDD_HHMMSS.csv` - 完整测试结果（管道符分隔）
+- `report_YYYYMMDD_HHMMSS_error.csv` - 仅包含失败的测试用例（管道符分隔）
 
 报告格式（PSV）：
 ```
-id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_status|actual_status|diff|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars|start_time|end_time
+id|desc|method|url|request_headers|request_body|tags|status|duration_s|expect_status|actual_status|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars|start_time|end_time|diff
 ```
 
 ## 历史执行记录

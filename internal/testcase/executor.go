@@ -797,8 +797,8 @@ func GenerateReport(results []TestResult) (string, string) {
 	var allReport strings.Builder
 	var errorReport strings.Builder
 
-	// 使用新的报告格式（status放在最前面，简化状态表示）
-	header := "status|id|desc|method|url|request_headers|request_body|tags|duration_s|expect_status|actual_status|diff|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars|start_time|end_time\n"
+	// 使用新的报告格式（status放在最前面，简化状态表示，diff放在最后）
+	header := "status|id|desc|method|url|request_headers|request_body|tags|duration_s|expect_status|actual_status|actual_body|expect_body|pre_conditions|post_conditions|extracted_vars|start_time|end_time|diff\n"
 	allReport.WriteString(header)
 
 	// 先收集失败的测试用例行
@@ -844,7 +844,6 @@ func GenerateReport(results []TestResult) (string, string) {
 			result.Duration.Seconds(),
 			result.TestCase.ExpectedStatus,
 			result.ActualStatus,
-			escapePipe(diff),
 			escapePipe(result.ResponseBody),
 			escapePipe(processedExpectedBody),
 			escapePipe(preConditions),
@@ -852,6 +851,7 @@ func GenerateReport(results []TestResult) (string, string) {
 			escapePipe(result.ExtractedVars),
 			startTime,
 			endTime,
+			escapePipe(diff),
 		)
 		allReport.WriteString(line)
 
@@ -899,8 +899,8 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 		return "", ""
 	}
 
-	// 保存全部报告
-	allPath := fmt.Sprintf("%s/report_%s.psv", reportDir, ts)
+	// 保存全部报告（使用 .csv 扩展名，内容保持管道符分隔）
+	allPath := fmt.Sprintf("%s/report_%s.csv", reportDir, ts)
 	if err := os.WriteFile(allPath, []byte(allReport), 0644); err != nil {
 		logger.Error("Failed to save report", zap.Error(err))
 	}
@@ -908,7 +908,7 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 	// 保存错误报告（如果有失败的测试）
 	var errorPath string
 	if errorReport != "" {
-		errorPath = fmt.Sprintf("%s/report_%s_error.psv", reportDir, ts)
+		errorPath = fmt.Sprintf("%s/report_%s_error.csv", reportDir, ts)
 		if err := os.WriteFile(errorPath, []byte(errorReport), 0644); err != nil {
 			logger.Error("Failed to save error report", zap.Error(err))
 		}
