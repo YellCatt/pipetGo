@@ -116,13 +116,48 @@ func jsonSubsetMatch(expected, actual gjson.Result) (bool, string) {
 
 func compareValues(expected, actual gjson.Result) (bool, string) {
 	expectedStr := expected.Str
+	expectedRaw := expected.Raw
 
-	if expectedStr == "{{skip}}" {
+	// 检查字符串类型的期望值
+	if expected.Type == gjson.String {
+		if expectedStr == "{{skip}}" {
+			return true, ""
+		}
+
+		if strings.HasPrefix(expectedStr, "{{regex:") && strings.HasSuffix(expectedStr, "}}") {
+			pattern := expectedStr[9 : len(expectedStr)-2]
+			pattern = fixRegexEscapes(pattern)
+			matched, err := regexp.MatchString(pattern, actual.String())
+			if err != nil {
+				return false, fmt.Sprintf("invalid regex: %s", err.Error())
+			}
+			if !matched {
+				return false, fmt.Sprintf("value '%s' does not match regex '%s'", actual.String(), pattern)
+			}
+			return true, ""
+		}
+
+		if strings.HasPrefix(expectedStr, "{{not_regex:") && strings.HasSuffix(expectedStr, "}}") {
+			pattern := expectedStr[12 : len(expectedStr)-2]
+			pattern = fixRegexEscapes(pattern)
+			matched, err := regexp.MatchString(pattern, actual.String())
+			if err != nil {
+				return false, fmt.Sprintf("invalid regex: %s", err.Error())
+			}
+			if matched {
+				return false, fmt.Sprintf("value '%s' should NOT match regex '%s'", actual.String(), pattern)
+			}
+			return true, ""
+		}
+	}
+
+	// 检查非字符串类型的期望值（如数字、布尔等）
+	if expectedRaw == "{{skip}}" {
 		return true, ""
 	}
 
-	if strings.HasPrefix(expectedStr, "{{regex:") && strings.HasSuffix(expectedStr, "}}") {
-		pattern := expectedStr[8 : len(expectedStr)-2]
+	if strings.HasPrefix(expectedRaw, "{{regex:") && strings.HasSuffix(expectedRaw, "}}") {
+		pattern := expectedRaw[9 : len(expectedRaw)-2]
 		pattern = fixRegexEscapes(pattern)
 		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
@@ -134,8 +169,8 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 		return true, ""
 	}
 
-	if strings.HasPrefix(expectedStr, "{{not_regex:") && strings.HasSuffix(expectedStr, "}}") {
-		pattern := expectedStr[12 : len(expectedStr)-2]
+	if strings.HasPrefix(expectedRaw, "{{not_regex:") && strings.HasSuffix(expectedRaw, "}}") {
+		pattern := expectedRaw[12 : len(expectedRaw)-2]
 		pattern = fixRegexEscapes(pattern)
 		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
@@ -147,6 +182,7 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 		return true, ""
 	}
 
+	// 常规类型和值比较
 	if expected.Type != actual.Type {
 		return false, fmt.Sprintf("type mismatch: expected %s, got %s", expected.Type, actual.Type)
 	}
@@ -268,32 +304,28 @@ func fixRegexEscapes(pattern string) string {
 		return pattern
 	}
 
-	// 需要转义的字符集合（正则表达式中的特殊转义字符）
-	escapeChars := map[byte]bool{
-		'd': true, 'w': true, 's': true, 'b': true,
-		'D': true, 'W': true, 'S': true, 'B': true,
-		'n': true, 't': true, 'r': true,
-	}
-
 	var result strings.Builder
+	i := 0
 
-	for i := 0; i < len(pattern); i++ {
+	for i < len(pattern) {
 		c := pattern[i]
 
 		// 如果当前字符是反斜杠，直接保留并跳过下一个字符
 		if c == '\\' && i+1 < len(pattern) {
 			result.WriteByte(c)
 			result.WriteByte(pattern[i+1])
-			i++
+			i += 2
 			continue
 		}
 
-		// 如果是需要转义的字符，添加反斜杠
-		if escapeChars[c] {
+		// 检查是否是需要转义的字符（正则表达式中的特殊字符）
+		switch c {
+		case 'd', 'D', 'w', 'W', 's', 'S', 'b', 'B', 'n', 't', 'r':
 			result.WriteByte('\\')
 		}
 
 		result.WriteByte(c)
+		i++
 	}
 
 	return result.String()
