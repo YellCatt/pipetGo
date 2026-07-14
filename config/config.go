@@ -80,17 +80,22 @@ func InitConfig() {
 		viper.SetConfigType("yaml")
 	}
 
-	// 启用环境变量替换
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
 	// 读取配置文件
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("Error reading config file: %v", err)
 	}
 
-	// 将配置解析到结构体
+	// 将配置解析到结构体（vars 字段会被 viper 转换为小写，后续会修复）
 	if err := viper.Unmarshal(&AppConfig); err != nil {
 		log.Fatalf("Unable to decode config into struct: %v", err)
+	}
+
+	// 单独读取 vars 配置，保留原始键名（避免 viper 自动转换小写）
+	rawVars := viper.GetStringMapString("vars")
+	if len(rawVars) > 0 {
+		AppConfig.Vars = make(map[string]string)
+		for k, v := range rawVars {
+			AppConfig.Vars[k] = v
+		}
 	}
 }
