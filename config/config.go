@@ -105,8 +105,51 @@ func InitConfig() {
 		log.Fatalf("Unable to decode config into struct: %v", err)
 	}
 
+	// 设置 cleaner 的默认配置
+	setCleanerDefaults()
+
 	// 单独读取 vars 配置，保留原始键名（避免 viper 自动转换小写）
 	AppConfig.Vars = loadRawVars()
+}
+
+// setCleanerDefaults 设置 cleaner 配置的默认值
+// 如果用户完全没有配置 cleaner，则启用默认配置
+// 如果用户配置了 cleaner 的某些字段，则只为空字段设置默认值
+func setCleanerDefaults() {
+	// 检查配置文件中是否存在 cleaner 配置
+	hasCleanerConfig := viper.IsSet("cleaner")
+
+	// 如果用户完全没有配置 cleaner，启用默认配置（包括 enabled: true）
+	if !hasCleanerConfig {
+		AppConfig.Cleaner.Enabled = true
+		AppConfig.Cleaner.RetentionDays = 30
+		AppConfig.Cleaner.LogDir = "./logs"
+		AppConfig.Cleaner.ReportDir = "./reports"
+		AppConfig.Cleaner.DataDir = "./sql"
+		AppConfig.Cleaner.IncludePatterns = []string{"*.log", "*.json", "*.csv", "*.txt"}
+		AppConfig.Cleaner.IntervalHours = 24
+		return
+	}
+
+	// 如果用户配置了 cleaner，但某些字段为空，则只为空字段设置默认值
+	if AppConfig.Cleaner.RetentionDays <= 0 {
+		AppConfig.Cleaner.RetentionDays = 30
+	}
+	if AppConfig.Cleaner.LogDir == "" {
+		AppConfig.Cleaner.LogDir = "./logs"
+	}
+	if AppConfig.Cleaner.ReportDir == "" {
+		AppConfig.Cleaner.ReportDir = "./reports"
+	}
+	if AppConfig.Cleaner.DataDir == "" {
+		AppConfig.Cleaner.DataDir = "./sql"
+	}
+	if len(AppConfig.Cleaner.IncludePatterns) == 0 {
+		AppConfig.Cleaner.IncludePatterns = []string{"*.log", "*.json", "*.csv", "*.txt"}
+	}
+	if AppConfig.Cleaner.IntervalHours <= 0 {
+		AppConfig.Cleaner.IntervalHours = 24
+	}
 }
 
 // loadRawVars 从配置文件读取原始 vars，保留键名大小写。
