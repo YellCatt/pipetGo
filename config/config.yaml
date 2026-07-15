@@ -31,3 +31,17 @@ email:
   auth_code: "gpfruabgjebubdad"
   smtp_server: "smtp.qq.com"
   smtp_port: 465
+
+cleaner:
+  enabled: true
+  retention_days: 30
+  log_dir: "./logs"
+  report_dir: "./reports"
+  data_dir: "./sql"
+  include_patterns:
+    - "*.log"
+    - "*.json"
+    - "*.csv"
+    - "*.txt"
+  exclude_patterns: []
+  interval_hours: 24

@@ -16,12 +16,13 @@ var CfgFile string
 
 // Config 表示应用程序的完整配置
 type Config struct {
-	Target TargetConfig      `mapstructure:"target"` // 目标 API 配置
-	Log    LogConfig         `mapstructure:"log"`    // 日志配置
-	Test   TestConfig        `mapstructure:"test"`   // 测试配置
-	HTTP   HTTPConfig        `mapstructure:"http"`   // HTTP 客户端配置
-	Email  EmailConfig       `mapstructure:"email"`  // 邮件配置
-	Vars   map[string]string `mapstructure:"vars"`   // 用户自定义变量（用于替换测试用例中的 {{var}}）
+	Target  TargetConfig      `mapstructure:"target"`  // 目标 API 配置
+	Log     LogConfig         `mapstructure:"log"`     // 日志配置
+	Test    TestConfig        `mapstructure:"test"`    // 测试配置
+	HTTP    HTTPConfig        `mapstructure:"http"`    // HTTP 客户端配置
+	Email   EmailConfig       `mapstructure:"email"`   // 邮件配置
+	Cleaner CleanupConfig     `mapstructure:"cleaner"` // 自动清理配置
+	Vars    map[string]string `mapstructure:"vars"`    // 用户自定义变量（用于替换测试用例中的 {{var}}）
 }
 
 // HTTPConfig 表示 HTTP 客户端的配置
@@ -64,6 +65,18 @@ type EmailConfig struct {
 	AuthCode   string `mapstructure:"auth_code"`  // 邮箱授权码
 	SMTPServer string `mapstructure:"smtp_server"` // SMTP 服务器地址
 	SMTPPort   int    `mapstructure:"smtp_port"`  // SMTP 端口
+}
+
+// CleanupConfig 表示自动清理相关的配置
+type CleanupConfig struct {
+	Enabled         bool     `mapstructure:"enabled"`          // 是否启用自动清理
+	RetentionDays   int      `mapstructure:"retention_days"`   // 文件保留天数
+	LogDir          string   `mapstructure:"log_dir"`          // 日志目录（自动从 log.output 提取）
+	ReportDir       string   `mapstructure:"report_dir"`       // 测试报告目录（自动从 test.report_dir 提取）
+	DataDir         string   `mapstructure:"data_dir"`         // 数据目录（自动从 test.data_dir 提取）
+	IncludePatterns []string `mapstructure:"include_patterns"` // 要清理的文件模式列表（如 *.log, *.json）
+	ExcludePatterns []string `mapstructure:"exclude_patterns"` // 排除的文件模式列表
+	IntervalHours   int      `mapstructure:"interval_hours"`   // 定时清理间隔（小时）
 }
 
 // AppConfig 存储全局配置实例
