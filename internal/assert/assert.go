@@ -125,8 +125,12 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 		}
 
 		if strings.HasPrefix(expectedStr, "{{regex:") && strings.HasSuffix(expectedStr, "}}") {
-			pattern := expectedStr[9 : len(expectedStr)-2]
+			pattern := expectedStr[8 : len(expectedStr)-2]
 			pattern = fixRegexEscapes(pattern)
+			pattern, err := validateRegexPattern(pattern)
+			if err != nil {
+				return false, fmt.Sprintf("invalid regex: %s", err.Error())
+			}
 			matched, err := regexp.MatchString(pattern, actual.String())
 			if err != nil {
 				return false, fmt.Sprintf("invalid regex: %s", err.Error())
@@ -140,6 +144,10 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 		if strings.HasPrefix(expectedStr, "{{not_regex:") && strings.HasSuffix(expectedStr, "}}") {
 			pattern := expectedStr[12 : len(expectedStr)-2]
 			pattern = fixRegexEscapes(pattern)
+			pattern, err := validateRegexPattern(pattern)
+			if err != nil {
+				return false, fmt.Sprintf("invalid regex: %s", err.Error())
+			}
 			matched, err := regexp.MatchString(pattern, actual.String())
 			if err != nil {
 				return false, fmt.Sprintf("invalid regex: %s", err.Error())
@@ -157,8 +165,12 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 	}
 
 	if strings.HasPrefix(expectedRaw, "{{regex:") && strings.HasSuffix(expectedRaw, "}}") {
-		pattern := expectedRaw[9 : len(expectedRaw)-2]
+		pattern := expectedRaw[8 : len(expectedRaw)-2]
 		pattern = fixRegexEscapes(pattern)
+		pattern, err := validateRegexPattern(pattern)
+		if err != nil {
+			return false, fmt.Sprintf("invalid regex: %s", err.Error())
+		}
 		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
 			return false, fmt.Sprintf("invalid regex: %s", err.Error())
@@ -172,6 +184,10 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 	if strings.HasPrefix(expectedRaw, "{{not_regex:") && strings.HasSuffix(expectedRaw, "}}") {
 		pattern := expectedRaw[12 : len(expectedRaw)-2]
 		pattern = fixRegexEscapes(pattern)
+		pattern, err := validateRegexPattern(pattern)
+		if err != nil {
+			return false, fmt.Sprintf("invalid regex: %s", err.Error())
+		}
 		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
 			return false, fmt.Sprintf("invalid regex: %s", err.Error())
@@ -329,4 +345,35 @@ func fixRegexEscapes(pattern string) string {
 	}
 
 	return result.String()
+}
+
+// validateRegexPattern 验证正则表达式模式是否有效
+// 如果模式以重复操作符开头，自动添加 . 作为前缀
+func validateRegexPattern(pattern string) (string, error) {
+	if pattern == "" {
+		return "", fmt.Errorf("pattern is empty")
+	}
+
+	// 检查模式是否以重复操作符开头
+	firstChar := pattern[0]
+	if firstChar == '*' || firstChar == '+' || firstChar == '?' || firstChar == '{' {
+		// 如果以重复操作符开头，在前面添加 . 匹配任意字符
+		pattern = "." + pattern
+	}
+
+	// 检查模式中是否有孤立的重复操作符（前面没有有效字符）
+	for i := 1; i < len(pattern); i++ {
+		c := pattern[i]
+		if c == '*' || c == '+' || c == '?' {
+			prevChar := pattern[i-1]
+			// 如果前一个字符也是特殊字符，需要处理
+			if prevChar == '(' || prevChar == '[' || prevChar == '|' || prevChar == '^' || prevChar == '$' {
+				// 在重复操作符前插入 .
+				pattern = pattern[:i] + "." + pattern[i:]
+				i++ // 跳过新插入的字符
+			}
+		}
+	}
+
+	return pattern, nil
 }
