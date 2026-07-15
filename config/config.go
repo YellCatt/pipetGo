@@ -101,28 +101,27 @@ func InitConfig() {
 func loadRawVars() map[string]string {
 	result := make(map[string]string)
 
-	// 优先从配置文件读取原始 YAML，保留键名大小写
-	configFile := viper.ConfigFileUsed()
-	if configFile == "" && CfgFile != "" {
-		configFile = CfgFile
+	// 确定配置文件路径（不依赖 viper.ConfigFileUsed，避免某些场景返回空）
+	configFile := CfgFile
+	if configFile == "" {
+		configFile = "./config/config.yaml"
 	}
 
-	if configFile != "" {
-		data, err := os.ReadFile(configFile)
-		if err == nil {
-			var raw map[string]any
-			if err := yaml.Unmarshal(data, &raw); err == nil {
-				if varsMap, ok := raw["vars"].(map[string]any); ok {
-					for k, v := range varsMap {
-						switch val := v.(type) {
-						case string:
-							result[k] = val
-						default:
-							result[k] = fmt.Sprintf("%v", val)
-						}
+	// 直接从文件读取原始 YAML，保留 vars 键名大小写
+	data, err := os.ReadFile(configFile)
+	if err == nil {
+		var raw map[string]any
+		if err := yaml.Unmarshal(data, &raw); err == nil {
+			if varsMap, ok := raw["vars"].(map[string]any); ok {
+				for k, v := range varsMap {
+					switch val := v.(type) {
+					case string:
+						result[k] = val
+					default:
+						result[k] = fmt.Sprintf("%v", val)
 					}
-					return result
 				}
+				return result
 			}
 		}
 	}
