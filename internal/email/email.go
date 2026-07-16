@@ -227,6 +227,32 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 	return SendEmail(subject, body)
 }
 
+// SendErrorReportEmail 发送异常退出报告邮件
+func SendErrorReportEmail(errorMessage string) error {
+	if !Config.Enabled {
+		log.Println("邮件发送功能已禁用，跳过邮件发送")
+		return nil
+	}
+	if Config.FromEmail == "" || Config.ToEmail == "" || Config.AuthCode == "" {
+		log.Println("邮件配置未设置，跳过邮件发送")
+		return nil
+	}
+
+	subject := fmt.Sprintf("【测试异常】pipetGo - %s - %s", getDeviceName(), timeutil.FormatDateTime(timeutil.Now()))
+
+	var body strings.Builder
+	body.WriteString("===== 测试异常报告 =====\n\n")
+	body.WriteString(fmt.Sprintf("发生时间: %s\n", timeutil.FormatDateTime(timeutil.Now())))
+	body.WriteString(fmt.Sprintf("测试设备: %s\n", getDeviceName()))
+	body.WriteString(fmt.Sprintf("\n异常信息:\n"))
+	body.WriteString(fmt.Sprintf("  %s\n", errorMessage))
+	body.WriteString("\n===== 报告结束 =====\n")
+	body.WriteString("来自 pipetGo 测试程序")
+
+	log.Println("发送异常报告邮件...")
+	return SendEmail(subject, body.String())
+}
+
 // SendTestStartEmail 发送测试开始通知邮件
 func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimatedDuration string) error {
 	if !Config.Enabled {

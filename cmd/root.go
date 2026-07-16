@@ -43,6 +43,12 @@ var (
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		logger.Error("Failed to execute command", zap.Error(err))
+		errorMsg := fmt.Sprintf("命令执行失败: %v", err)
+		if email.Config.Enabled && email.Config.FromEmail != "" && email.Config.ToEmail != "" {
+			if sendErr := email.SendErrorReportEmail(errorMsg); sendErr != nil {
+				logger.Warn("Failed to send error report email", zap.Error(sendErr))
+			}
+		}
 		os.Exit(1)
 	}
 }
@@ -137,6 +143,10 @@ func runTests(paths []string) {
 	testCases, err := psv.ParseFiles(paths)
 	if err != nil {
 		logger.Error("Failed to parse PSV files", zap.Error(err))
+		errorMsg := fmt.Sprintf("解析测试用例文件失败: %v", err)
+		if err := email.SendErrorReportEmail(errorMsg); err != nil {
+			logger.Warn("Failed to send error report email", zap.Error(err))
+		}
 		os.Exit(1)
 	}
 
@@ -229,6 +239,10 @@ func runTests(paths []string) {
 					if !result.Passed {
 						fmt.Printf("[全局前置] ❌ 失败: %s\n", result.Error)
 						fmt.Printf("\n全局前置条件失败，终止测试执行\n")
+						errorMsg := fmt.Sprintf("全局前置条件 '%s' 执行失败: %s", tc.ID, result.Error)
+						if err := email.SendErrorReportEmail(errorMsg); err != nil {
+							logger.Warn("Failed to send error report email", zap.Error(err))
+						}
 						os.Exit(1)
 					}
 					fmt.Printf("[全局前置] ✅ 成功\n")
