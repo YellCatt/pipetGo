@@ -5,6 +5,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -62,9 +63,13 @@ func init() {
 }
 
 // initConfig 初始化应用配置
-// 依次初始化：配置、日志、全局变量、邮件配置
+// 依次初始化：必要目录和默认配置、配置、日志、全局变量、邮件配置
 func initConfig() {
+	// 自动创建必要的目录和默认配置文件
+	initDirectories()
+	
 	config.InitConfig()
+	
 	logger.InitLogger(logger.LogConfig{
 		Level:    config.AppConfig.Log.Level,
 		Encoding: config.AppConfig.Log.Encoding,
@@ -398,5 +403,96 @@ func formatDuration(d time.Duration) string {
 		hours := int(d.Hours())
 		minutes := int(d.Minutes()) % 60
 		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+}
+
+// initDirectories 自动创建必要的目录和默认配置文件
+// 如果目录不存在则创建，已存在则跳过
+func initDirectories() {
+	// 需要创建的目录列表（使用默认值，因为此时配置还未加载）
+	directories := []string{
+		"./config",     // 配置文件目录
+		"./logs",       // 日志目录
+		"./reports",    // 测试报告目录
+		"./sql",        // 数据存储目录（CSV文件）
+		"./testcases",  // 测试用例目录
+	}
+
+	for _, dir := range directories {
+		if dir == "." || dir == "/" {
+			continue
+		}
+
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			fmt.Printf("警告: 创建目录失败 '%s': %v\n", dir, err)
+		}
+	}
+
+	// 检查并创建默认配置文件
+	createDefaultConfigFile()
+}
+
+// createDefaultConfigFile 如果 config.yaml 不存在，创建默认配置文件
+func createDefaultConfigFile() {
+	configPath := "./config/config.yaml"
+	
+	// 检查文件是否存在
+	if _, err := os.Stat(configPath); err == nil {
+		// 文件已存在，跳过创建
+		return
+	}
+
+	// 默认配置内容
+	defaultConfig := `target:
+  base_url: "https://localhost:8080"
+  timeout: 30
+
+log:
+  level: "info"
+  encoding: "json"
+  output: "./logs/pipet.log"
+
+test:
+  report_dir: "./reports"
+  test_case_dir: "./testcases"
+  data_dir: "./sql"
+  severe_status:
+    - 500
+  global_pre: []
+  global_post: []
+  device_name: ""
+
+http:
+  insecure_skip_verify: false
+
+vars: {}
+
+email:
+  enabled: false
+  from: ""
+  to: ""
+  auth_code: ""
+  smtp_server: "smtp.example.com"
+  smtp_port: 465
+
+cleaner:
+  enabled: true
+  retention_days: 30
+  log_dir: "./logs"
+  report_dir: "./reports"
+  data_dir: "./sql"
+  include_patterns:
+    - "*.log"
+    - "*.json"
+    - "*.csv"
+    - "*.txt"
+  exclude_patterns: []
+  interval_hours: 24
+`
+
+	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
+		fmt.Printf("警告: 创建默认配置文件失败 '%s': %v\n", configPath, err)
+	} else {
+		fmt.Printf("已创建默认配置文件: %s\n", configPath)
 	}
 }
