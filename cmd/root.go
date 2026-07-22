@@ -44,7 +44,7 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		logger.Error("Failed to execute command", zap.Error(err))
 		errorMsg := fmt.Sprintf("命令执行失败: %v", err)
-		if email.Config.Enabled && email.Config.FromEmail != "" && email.Config.ToEmail != "" {
+		if email.Config.Enabled && email.Config.FromEmail != "" && len(email.Config.ToEmail) > 0 {
 			if sendErr := email.SendErrorReportEmail(errorMsg); sendErr != nil {
 				logger.Warn("Failed to send error report email", zap.Error(sendErr))
 			}
@@ -469,7 +469,7 @@ vars: {}
 email:
   enabled: false
   from: ""
-  to: ""
+  to: []
   auth_code: ""
   smtp_server: "smtp.example.com"
   smtp_port: 465

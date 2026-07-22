@@ -17,7 +17,7 @@ import (
 type EmailConfig struct {
 	Enabled    bool
 	FromEmail  string
-	ToEmail    string
+	ToEmail    []string
 	AuthCode   string
 	SMTPServer string
 	SMTPPort   int
@@ -54,8 +54,9 @@ func SendEmail(subject, body string) error {
 	subject = formatSubject(subject)
 	body = formatBody(body)
 
+	toEmails := strings.Join(Config.ToEmail, ", ")
 	msg := []byte("From: " + Config.FromEmail + "\r\n" +
-		"To: " + Config.ToEmail + "\r\n" +
+		"To: " + toEmails + "\r\n" +
 		"Subject: " + subject + "\r\n" +
 		"Content-Type: text/plain; charset=UTF-8\r\n" +
 		"\r\n" +
@@ -92,15 +93,18 @@ func SendEmail(subject, body string) error {
 		return err
 	}
 
-	// 设置发件人和收件人
+	// 设置发件人
 	if err := client.Mail(Config.FromEmail); err != nil {
 		log.Printf("设置发件人失败: %v\n", err)
 		return err
 	}
 
-	if err := client.Rcpt(Config.ToEmail); err != nil {
-		log.Printf("设置收件人失败: %v\n", err)
-		return err
+	// 设置多个收件人
+	for _, to := range Config.ToEmail {
+		if err := client.Rcpt(to); err != nil {
+			log.Printf("设置收件人 %s 失败: %v\n", to, err)
+			return err
+		}
 	}
 
 	// 发送邮件内容
@@ -213,7 +217,7 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 		log.Println("邮件发送功能已禁用，跳过邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || Config.ToEmail == "" || Config.AuthCode == "" {
+	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过邮件发送")
 		return nil
 	}
@@ -233,7 +237,7 @@ func SendErrorReportEmail(errorMessage string) error {
 		log.Println("邮件发送功能已禁用，跳过邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || Config.ToEmail == "" || Config.AuthCode == "" {
+	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过邮件发送")
 		return nil
 	}
@@ -259,7 +263,7 @@ func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimat
 		log.Println("邮件发送功能已禁用，跳过邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || Config.ToEmail == "" || Config.AuthCode == "" {
+	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过邮件发送")
 		return nil
 	}

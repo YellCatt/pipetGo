@@ -27,7 +27,8 @@ vars:
 email:
   enabled: true
   from: "768305875@qq.com"
-  to: "768305875@qq.com"
+  to:
+    - "768305875@qq.com"
   auth_code: "gpfruabgjebubdad"
   smtp_server: "smtp.qq.com"
   smtp_port: 465
