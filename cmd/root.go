@@ -36,6 +36,12 @@ var (
 
 	// tagsFlag 存储命令行指定的标签过滤参数
 	tagsFlag string
+	
+	// roundsFlag 存储命令行指定的多轮测试次数
+	roundsFlag int
+	
+	// intervalMsFlag 存储命令行指定的轮间间隔时间（毫秒）
+	intervalMsFlag int
 )
 
 // Execute 启动命令行应用
@@ -59,6 +65,8 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.Flags().StringVar(&config.CfgFile, "config", "", "config file (default is ./config/config.yaml)")
 	rootCmd.Flags().StringVarP(&tagsFlag, "tags", "t", "", "filter tests by tags (comma-separated)")
+	rootCmd.Flags().IntVarP(&roundsFlag, "rounds", "r", 0, "number of test rounds (default from config)")
+	rootCmd.Flags().IntVarP(&intervalMsFlag, "interval", "i", 0, "interval between rounds in milliseconds (default from config)")
 }
 
 // initConfig 初始化应用配置
@@ -193,6 +201,20 @@ func runTests(paths []string) {
 		estimatedDurationStr = "无历史数据"
 	}
 
+	// 确定多轮测试配置（命令行参数优先于配置文件）
+	rounds := config.AppConfig.Test.Rounds
+	if roundsFlag > 0 {
+		rounds = roundsFlag
+	}
+	if rounds < 1 {
+		rounds = 1
+	}
+
+	intervalMs := config.AppConfig.Test.IntervalMs
+	if intervalMsFlag > 0 {
+		intervalMs = intervalMsFlag
+	}
+
 	// 打印本次执行的测试用例统计信息
 	executedCount, executedChainCount, executedIndependentCount := testcase.CountTestSummary(testCases)
 
@@ -215,6 +237,9 @@ func runTests(paths []string) {
 
 	fmt.Printf("╠════════════════════════════════════════════════════════╣\n")
 	fmt.Printf("║ 预估执行时间: %-41s║\n", estimatedDurationStr)
+	if rounds > 1 {
+		fmt.Printf("║ 多轮测试配置: %d 轮，每轮间隔 %dms                     ║\n", rounds, intervalMs)
+	}
 	fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
 
 	// 发送测试开始通知邮件
@@ -224,11 +249,7 @@ func runTests(paths []string) {
 		}
 	}()
 
-
-	// 生成报告时间戳（测试开始时生成，后续更新报告时使用同一个时间戳）
-	reportTimestamp := timeutil.FormatCompact(timeutil.Now())
-
-	// 执行全局前置条件（所有测试用例执行前运行）
+	// 执行全局前置条件（所有测试用例执行前运行，仅在第一轮执行）
 	if len(config.AppConfig.Test.GlobalPre) > 0 {
 		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
 		fmt.Printf("║ 执行全局前置条件                                       ║\n")
@@ -261,36 +282,36 @@ func runTests(paths []string) {
 		fmt.Println()
 	}
 
-	// 运行测试（串行执行），每完成一个测试就更新一次报告
-	var results []testcase.TestResult
-	chainFiles := testcase.GetChainFiles(testCases)
-	for i, tc := range testCases {
-		result := testcase.ExecuteTestCase(tc)
-		results = append(results, result)
-
-		// 每完成一个测试用例就更新一次报告（覆盖同一个文件）
-		fmt.Printf("\n\n────────────────────────────────────────────────────────────\n")
-		stepLabel := "测试"
-		if chainFiles[tc.FileName] {
-			stepLabel = "链式步骤"
+	// 多轮测试执行
+	var allRoundResults []testcase.TestResult
+	for round := 1; round <= rounds; round++ {
+		if rounds > 1 {
+			fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
+			fmt.Printf("║                    第 %d/%d 轮测试                      ║\n", round, rounds)
+			fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
 		}
-		fmt.Printf("第 %d/%d 个%s完成，正在更新报告...\n", i+1, len(testCases), stepLabel)
-		fmt.Printf("────────────────────────────────────────────────────────────\n")
 
+		// 生成报告时间戳（每轮使用不同的时间戳）
+		reportTimestamp := timeutil.FormatCompact(timeutil.Now())
 
-		// 生成并保存测试报告（使用同一个时间戳，覆盖之前的报告）
-		allReport, errorReport := testcase.GenerateReport(results)
-		allPath, errorPath := testcase.SaveReports(allReport, errorReport, reportTimestamp)
+		// 执行本轮测试
+		roundResults := executeTestRound(testCases, reportTimestamp, round, rounds)
+		allRoundResults = append(allRoundResults, roundResults...)
 
-		// 输出报告路径
-		fmt.Printf("\nPSV 报告已保存: %s\n", allPath)
-		if errorPath != "" {
-			fmt.Printf("异常用例 PSV 报告已保存: %s\n", errorPath)
+		// 轮间等待（最后一轮不需要等待）
+		if round < rounds && intervalMs > 0 {
+			fmt.Printf("\n等待 %dms 后开始下一轮测试...\n", intervalMs)
+			time.Sleep(time.Duration(intervalMs) * time.Millisecond)
 		}
 	}
 
-	// 打印最终测试摘要
-	testcase.PrintSummary(results)
+	// 打印多轮测试汇总摘要
+	if rounds > 1 {
+		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
+		fmt.Printf("║              多轮测试汇总结果                          ║\n")
+		fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
+		testcase.PrintSummary(allRoundResults)
+	}
 
 	// 测试结束后计算并存储所有成功测试用例的平均执行时间
 	if err := storage.CalculateAndStoreAverages(); err != nil {
@@ -329,14 +350,14 @@ func runTests(paths []string) {
 
 	// 如果有失败的测试用例，退出码设为 1
 	failedCount := 0
-	for _, r := range results {
+	for _, r := range allRoundResults {
 		if !r.Passed && !r.TestCase.Skip {
 			failedCount++
 		}
 	}
 
 	// 测试结束后发送邮件报告
-	if err := email.SendTestReportEmail(results); err != nil {
+	if err := email.SendTestReportEmail(allRoundResults); err != nil {
 		logger.Warn("Failed to send email report", zap.Error(err))
 	}
 
@@ -431,6 +452,55 @@ func initDirectories() {
 	createDefaultConfigFile()
 }
 
+// executeTestRound 执行单轮测试
+// testCases: 测试用例列表
+// reportTimestamp: 报告时间戳
+// round: 当前轮次
+// totalRounds: 总轮数
+// 返回: 本轮测试结果
+func executeTestRound(testCases []psv.TestCase, reportTimestamp string, round, totalRounds int) []testcase.TestResult {
+	var results []testcase.TestResult
+	chainFiles := testcase.GetChainFiles(testCases)
+	
+	for i, tc := range testCases {
+		result := testcase.ExecuteTestCase(tc)
+		results = append(results, result)
+
+		// 每完成一个测试用例就更新一次报告（覆盖同一个文件）
+		fmt.Printf("\n\n────────────────────────────────────────────────────────────\n")
+		stepLabel := "测试"
+		if chainFiles[tc.FileName] {
+			stepLabel = "链式步骤"
+		}
+		if totalRounds > 1 {
+			fmt.Printf("第 %d/%d 轮 - 第 %d/%d 个%s完成，正在更新报告...\n", round, totalRounds, i+1, len(testCases), stepLabel)
+		} else {
+			fmt.Printf("第 %d/%d 个%s完成，正在更新报告...\n", i+1, len(testCases), stepLabel)
+		}
+		fmt.Printf("────────────────────────────────────────────────────────────\n")
+
+		// 生成并保存测试报告（使用同一个时间戳，覆盖之前的报告）
+		allReport, errorReport := testcase.GenerateReport(results)
+		allPath, errorPath := testcase.SaveReports(allReport, errorReport, reportTimestamp)
+
+		// 输出报告路径
+		fmt.Printf("\nPSV 报告已保存: %s\n", allPath)
+		if errorPath != "" {
+			fmt.Printf("异常用例 PSV 报告已保存: %s\n", errorPath)
+		}
+	}
+
+	// 打印本轮测试摘要（多轮模式下）
+	if totalRounds > 1 {
+		fmt.Printf("\n────────────────────────────────────────────────────────────\n")
+		fmt.Printf("第 %d/%d 轮测试完成\n", round, totalRounds)
+		fmt.Printf("────────────────────────────────────────────────────────────\n")
+		testcase.PrintSummary(results)
+	}
+
+	return results
+}
+
 // createDefaultConfigFile 如果 config.yaml 不存在，创建默认配置文件
 func createDefaultConfigFile() {
 	configPath := "./config/config.yaml"
@@ -460,6 +530,8 @@ test:
   global_pre: []
   global_post: []
   device_name: ""
+  rounds: 1
+  interval_ms: 0
 
 http:
   insecure_skip_verify: false

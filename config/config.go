@@ -55,6 +55,8 @@ type TestConfig struct {
 	GlobalPre     []string `mapstructure:"global_pre"`     // 全局前置条件测试用例ID列表（所有测试执行前运行）
 	GlobalPost    []string `mapstructure:"global_post"`    // 全局后置条件测试用例ID列表（所有测试执行后运行）
 	DeviceName    string   `mapstructure:"device_name"`    // 测试设备名称（未配置时自动使用主机名）
+	Rounds        int      `mapstructure:"rounds"`         // 多轮测试次数，默认为1（单次测试）
+	IntervalMs    int      `mapstructure:"interval_ms"`    // 轮间间隔时间（毫秒），默认为0
 }
 
 // EmailConfig 表示邮件发送相关的配置
