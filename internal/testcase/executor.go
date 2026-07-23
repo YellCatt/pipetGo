@@ -96,11 +96,31 @@ func isUsedAsPreCondition(tcID string) bool {
 func isVariableUsed(varName string) bool {
 	varPattern := "{{" + varName + "}}"
 	return slices.ContainsFunc(allTestCases, func(tc psv.TestCase) bool {
-		return strings.Contains(tc.URL, varPattern) ||
-			strings.Contains(tc.Headers, varPattern) ||
-			strings.Contains(tc.JSON, varPattern) ||
-			strings.Contains(tc.Form, varPattern) ||
-			strings.Contains(tc.Body, varPattern)
+		// 检查 URL
+		if strings.Contains(tc.URL, varPattern) {
+			return true
+		}
+		// 检查 Headers (map[string]string)
+		for _, v := range tc.Headers {
+			if strings.Contains(v, varPattern) {
+				return true
+			}
+		}
+		// 检查 JSON
+		if strings.Contains(tc.JSON, varPattern) {
+			return true
+		}
+		// 检查 Form (map[string]string)
+		for _, v := range tc.Form {
+			if strings.Contains(v, varPattern) {
+				return true
+			}
+		}
+		// 检查 Body
+		if strings.Contains(tc.Body, varPattern) {
+			return true
+		}
+		return false
 	})
 }
 
