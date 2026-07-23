@@ -92,6 +92,18 @@ func isUsedAsPreCondition(tcID string) bool {
 	})
 }
 
+// isVariableUsed 判断指定变量名是否被其他测试用例引用
+func isVariableUsed(varName string) bool {
+	varPattern := "{{" + varName + "}}"
+	return slices.ContainsFunc(allTestCases, func(tc psv.TestCase) bool {
+		return strings.Contains(tc.URL, varPattern) ||
+			strings.Contains(tc.Headers, varPattern) ||
+			strings.Contains(tc.JSON, varPattern) ||
+			strings.Contains(tc.Form, varPattern) ||
+			strings.Contains(tc.Body, varPattern)
+	})
+}
+
 func executePostConditions(postIDs []string) {
 	for _, postID := range postIDs {
 		postTC := findTestCaseByID(postID)
@@ -143,6 +155,11 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 			part = strings.TrimSpace(part)
 			if idx := strings.Index(part, "="); idx != -1 {
 				varName := strings.TrimSpace(part[:idx])
+				// 如果变量被其他测试用例引用，则不清理
+				if isVariableUsed(varName) {
+					logger.Info("变量被其他用例引用，跳过清理", zap.String("name", varName), zap.String("test", tc.ID))
+					continue
+				}
 				delete(globalVars, varName)
 				vars.Delete(varName)
 				logger.Debug("Cleaned up variable", zap.String("name", varName), zap.String("test", tc.ID))
