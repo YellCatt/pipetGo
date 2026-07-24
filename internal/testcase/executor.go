@@ -150,7 +150,6 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 	if result.Passed {
 		logger.Info("Test passed", zap.String("id", tc.ID), zap.Duration("duration", result.Duration))
 		fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
-		go storage.RecordExecutionTime(tc.ID, tc.Desc, tc.FileName, vars.Replace(tc.URL), result.Duration, true)
 	} else {
 		logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
 		fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())

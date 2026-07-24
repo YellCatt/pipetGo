@@ -462,6 +462,9 @@ func executeTestRound(testCases []psv.TestCase, reportTimestamp string, round, t
 	var results []testcase.TestResult
 	chainFiles := testcase.GetChainFiles(testCases)
 	
+	// 记录轮次开始时间，用于计算总耗时
+	roundStartTime := time.Now()
+	
 	for i, tc := range testCases {
 		result := testcase.ExecuteTestCase(tc)
 		results = append(results, result)
@@ -489,7 +492,13 @@ func executeTestRound(testCases []psv.TestCase, reportTimestamp string, round, t
 			fmt.Printf("异常用例 PSV 报告已保存: %s\n", errorPath)
 		}
 	}
-
+	
+	// 计算轮次总耗时
+	roundTotalDuration := time.Since(roundStartTime)
+	
+	// 计算修正后的执行时间，将系统开销平均分摊到每个成功的测试用例
+	correctAndRecordResults(results, roundTotalDuration)
+	
 	// 打印本轮测试摘要（多轮模式下）
 	if totalRounds > 1 {
 		fmt.Printf("\n────────────────────────────────────────────────────────────\n")
@@ -499,6 +508,61 @@ func executeTestRound(testCases []psv.TestCase, reportTimestamp string, round, t
 	}
 
 	return results
+}
+
+// correctAndRecordResults 修正测试结果的执行时间并记录到存储
+// 将总耗时与各测试用例实际时长之和的差值平均分摊到每个成功的测试用例
+func correctAndRecordResults(results []testcase.TestResult, totalDuration time.Duration) {
+	// 计算所有成功测试用例的实际时长之和
+	var actualSum time.Duration
+	var passedCount int
+	for _, result := range results {
+		if result.Passed && !result.TestCase.Skip {
+			actualSum += result.Duration
+			passedCount++
+		}
+	}
+	
+	// 如果没有成功的测试用例，无需修正
+	if passedCount == 0 {
+		return
+	}
+	
+	// 计算系统开销（总时长与实际时长之和的差值）
+	overhead := totalDuration - actualSum
+	
+	// 计算每个成功测试用例需要分摊的开销
+	overheadPerTest := overhead / time.Duration(passedCount)
+	
+	logger.Info("Correcting execution times",
+		zap.Duration("total_duration", totalDuration),
+		zap.Duration("actual_sum", actualSum),
+		zap.Duration("overhead", overhead),
+		zap.Int("passed_count", passedCount),
+		zap.Duration("overhead_per_test", overheadPerTest))
+	
+	// 修正每个成功测试用例的执行时间并记录到存储
+	for _, result := range results {
+		if result.Passed && !result.TestCase.Skip {
+			// 计算修正后的执行时间
+			correctedDuration := result.Duration + overheadPerTest
+			
+			// 异步记录修正后的执行时间到存储
+			go storage.RecordExecutionTime(
+				result.TestCase.ID,
+				result.TestCase.Desc,
+				result.TestCase.FileName,
+				vars.Replace(result.TestCase.URL),
+				correctedDuration,
+				true,
+			)
+			
+			logger.Info("Corrected execution time recorded",
+				zap.String("test_case_id", result.TestCase.ID),
+				zap.Duration("original_duration", result.Duration),
+				zap.Duration("corrected_duration", correctedDuration))
+		}
+	}
 }
 
 // createDefaultConfigFile 如果 config.yaml 不存在，创建默认配置文件
