@@ -258,7 +258,7 @@ func SendErrorReportEmail(errorMessage string) error {
 }
 
 // SendTestStartEmail 发送测试开始通知邮件
-func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimatedDuration string) error {
+func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimatedDuration time.Duration, rounds int, intervalMs int) error {
 	if !Config.Enabled {
 		log.Println("邮件发送功能已禁用，跳过邮件发送")
 		return nil
@@ -269,17 +269,38 @@ func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimat
 	}
 
 	// 使用东八区时间
-	subject := fmt.Sprintf("【测试开始】pipetGo - %s - %s", getDeviceName(), timeutil.FormatDateTime(timeutil.Now()))
+	now := timeutil.Now()
+	subject := fmt.Sprintf("【测试开始】pipetGo - %s - %s", getDeviceName(), timeutil.FormatDateTime(now))
 
 	var body strings.Builder
 	body.WriteString("===== 测试开始通知 =====\n\n")
-	body.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(timeutil.Now())))
+	body.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(now)))
 	body.WriteString(fmt.Sprintf("测试设备: %s\n", getDeviceName()))
 	body.WriteString(fmt.Sprintf("\n测试用例统计:\n"))
 	body.WriteString(fmt.Sprintf("  本次测试用例总数: %d\n", testCaseCount))
 	body.WriteString(fmt.Sprintf("  链式测试: %d\n", chainCount))
 	body.WriteString(fmt.Sprintf("  独立测试: %d\n", independentCount))
-	body.WriteString(fmt.Sprintf("\n预估执行时间: %s\n", estimatedDuration))
+
+	if rounds > 1 {
+		body.WriteString(fmt.Sprintf("\n多轮测试配置:\n"))
+		body.WriteString(fmt.Sprintf("  测试轮数: %d\n", rounds))
+		body.WriteString(fmt.Sprintf("  轮间隔: %dms\n", intervalMs))
+	}
+
+	if estimatedDuration > 0 {
+		// 计算多轮测试的总预估时间
+		totalDuration := estimatedDuration * time.Duration(rounds)
+		if rounds > 1 {
+			// 添加轮间隔时间
+			totalDuration += time.Duration((rounds-1)*intervalMs) * time.Millisecond
+		}
+		estimatedEndTime := now.Add(totalDuration)
+		body.WriteString(fmt.Sprintf("\n预估执行时间: %v\n", totalDuration))
+		body.WriteString(fmt.Sprintf("预测结束时间: %s\n", timeutil.FormatDateTime(estimatedEndTime)))
+	} else {
+		body.WriteString(fmt.Sprintf("\n预估执行时间: 无历史数据\n"))
+		body.WriteString(fmt.Sprintf("预测结束时间: 无法预测\n"))
+	}
 	body.WriteString("\n===== 通知结束 =====\n")
 	body.WriteString("来自 pipetGo 测试程序")
 

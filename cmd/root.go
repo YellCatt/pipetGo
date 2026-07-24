@@ -36,10 +36,10 @@ var (
 
 	// tagsFlag 存储命令行指定的标签过滤参数
 	tagsFlag string
-	
+
 	// roundsFlag 存储命令行指定的多轮测试次数
 	roundsFlag int
-	
+
 	// intervalMsFlag 存储命令行指定的轮间间隔时间（毫秒）
 	intervalMsFlag int
 )
@@ -74,9 +74,9 @@ func init() {
 func initConfig() {
 	// 自动创建必要的目录和默认配置文件
 	initDirectories()
-	
+
 	config.InitConfig()
-	
+
 	logger.InitLogger(logger.LogConfig{
 		Level:    config.AppConfig.Log.Level,
 		Encoding: config.AppConfig.Log.Encoding,
@@ -145,7 +145,6 @@ func runTests(paths []string) {
 		}
 	}
 
-
 	// 如果未指定路径，使用默认测试用例目录
 	if len(paths) == 0 {
 		paths = []string{config.AppConfig.Test.TestCaseDir}
@@ -179,7 +178,6 @@ func runTests(paths []string) {
 
 	// 根据标签过滤测试用例
 	testCases = testcase.FilterByTags(testCases, tags)
-
 
 	// 如果没有测试用例，直接返回
 	if len(testCases) == 0 {
@@ -244,7 +242,7 @@ func runTests(paths []string) {
 
 	// 发送测试开始通知邮件
 	go func() {
-		if err := email.SendTestStartEmail(executedCount, executedChainCount, executedIndependentCount, estimatedDurationStr); err != nil {
+		if err := email.SendTestStartEmail(executedCount, executedChainCount, executedIndependentCount, estimatedDuration, rounds, intervalMs); err != nil {
 			logger.Warn("Failed to send test start email", zap.Error(err))
 		}
 	}()
@@ -431,11 +429,11 @@ func formatDuration(d time.Duration) string {
 func initDirectories() {
 	// 需要创建的目录列表（使用默认值，因为此时配置还未加载）
 	directories := []string{
-		"./config",     // 配置文件目录
-		"./logs",       // 日志目录
-		"./reports",    // 测试报告目录
-		"./sql",        // 数据存储目录（CSV文件）
-		"./testcases",  // 测试用例目录
+		"./config",    // 配置文件目录
+		"./logs",      // 日志目录
+		"./reports",   // 测试报告目录
+		"./sql",       // 数据存储目录（CSV文件）
+		"./testcases", // 测试用例目录
 	}
 
 	for _, dir := range directories {
@@ -461,10 +459,10 @@ func initDirectories() {
 func executeTestRound(testCases []psv.TestCase, reportTimestamp string, round, totalRounds int) []testcase.TestResult {
 	var results []testcase.TestResult
 	chainFiles := testcase.GetChainFiles(testCases)
-	
+
 	// 记录轮次开始时间，用于计算总耗时
 	roundStartTime := time.Now()
-	
+
 	for i, tc := range testCases {
 		result := testcase.ExecuteTestCase(tc)
 		results = append(results, result)
@@ -492,13 +490,13 @@ func executeTestRound(testCases []psv.TestCase, reportTimestamp string, round, t
 			fmt.Printf("异常用例 PSV 报告已保存: %s\n", errorPath)
 		}
 	}
-	
+
 	// 计算轮次总耗时
 	roundTotalDuration := time.Since(roundStartTime)
-	
+
 	// 计算修正后的执行时间，将系统开销平均分摊到每个成功的测试用例
 	correctAndRecordResults(results, roundTotalDuration)
-	
+
 	// 打印本轮测试摘要（多轮模式下）
 	if totalRounds > 1 {
 		fmt.Printf("\n────────────────────────────────────────────────────────────\n")
@@ -522,31 +520,31 @@ func correctAndRecordResults(results []testcase.TestResult, totalDuration time.D
 			passedCount++
 		}
 	}
-	
+
 	// 如果没有成功的测试用例，无需修正
 	if passedCount == 0 {
 		return
 	}
-	
+
 	// 计算系统开销（总时长与实际时长之和的差值）
 	overhead := totalDuration - actualSum
-	
+
 	// 计算每个成功测试用例需要分摊的开销
 	overheadPerTest := overhead / time.Duration(passedCount)
-	
+
 	logger.Info("Correcting execution times",
 		zap.Duration("total_duration", totalDuration),
 		zap.Duration("actual_sum", actualSum),
 		zap.Duration("overhead", overhead),
 		zap.Int("passed_count", passedCount),
 		zap.Duration("overhead_per_test", overheadPerTest))
-	
+
 	// 修正每个成功测试用例的执行时间并记录到存储
 	for _, result := range results {
 		if result.Passed && !result.TestCase.Skip {
 			// 计算修正后的执行时间
 			correctedDuration := result.Duration + overheadPerTest
-			
+
 			// 异步记录修正后的执行时间到存储
 			go storage.RecordExecutionTime(
 				result.TestCase.ID,
@@ -556,7 +554,7 @@ func correctAndRecordResults(results []testcase.TestResult, totalDuration time.D
 				correctedDuration,
 				true,
 			)
-			
+
 			logger.Info("Corrected execution time recorded",
 				zap.String("test_case_id", result.TestCase.ID),
 				zap.Duration("original_duration", result.Duration),
@@ -568,7 +566,7 @@ func correctAndRecordResults(results []testcase.TestResult, totalDuration time.D
 // createDefaultConfigFile 如果 config.yaml 不存在，创建默认配置文件
 func createDefaultConfigFile() {
 	configPath := "./config/config.yaml"
-	
+
 	// 检查文件是否存在
 	if _, err := os.Stat(configPath); err == nil {
 		// 文件已存在，跳过创建
