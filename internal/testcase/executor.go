@@ -18,6 +18,7 @@ import (
 
 	"pipetGo/config"
 	"pipetGo/internal/assert"
+	"pipetGo/internal/cleaner"
 	"pipetGo/internal/httpclient"
 	"pipetGo/internal/logger"
 	"pipetGo/internal/psv"
@@ -260,7 +261,6 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		zap.String("processedJSON", processedJSON))
 	logger.Info("当前全局变量", zap.Any("vars", vars.GetAll()))
 
-
 	// 构建请求体（用于报告记录）
 	var requestBody string
 	if tc.JSON != "" {
@@ -357,7 +357,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		return finishTestCase(tc, result, startTime)
 	}
 
-	result.ResponseBody = string(resp.Body())
+	result.ResponseBody = cleaner.CompressResponseBody(string(resp.Body()))
 	result.ActualStatus = resp.StatusCode()
 
 	// 流式模式处理
@@ -497,7 +497,7 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 
 	// 构建聚合结果
 	aggregatedResult := assert.BuildAggregatedResult(aggregatedContent.String(), chunkCount)
-	result.ResponseBody = aggregatedResult
+	result.ResponseBody = cleaner.CompressResponseBody(aggregatedResult)
 
 	// JSON 响应体断言
 	if tc.ExpectedBody != "" {

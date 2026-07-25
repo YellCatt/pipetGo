@@ -2,9 +2,12 @@
 package cleaner
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -26,9 +29,9 @@ type Config struct {
 
 // Cleaner 清理器
 type Cleaner struct {
-	config    Config
-	stopChan  chan struct{}
-	running   bool
+	config   Config
+	stopChan chan struct{}
+	running  bool
 }
 
 // NewCleaner 创建清理器实例
@@ -247,4 +250,48 @@ func ExtractLogDir(logOutputPath string) string {
 		return ""
 	}
 	return filepath.Dir(logOutputPath)
+}
+
+// CompressResponseBody 压缩接口返回内容
+// 去除换行符、制表符和多余的空格，对于 JSON 格式进行智能压缩
+// body: 原始响应体
+// 返回: 压缩后的响应体
+func CompressResponseBody(body string) string {
+	if body == "" {
+		return ""
+	}
+
+	compressed := strings.ReplaceAll(body, "\n", "")
+	compressed = strings.ReplaceAll(compressed, "\r", "")
+	compressed = strings.ReplaceAll(compressed, "\t", "")
+
+	spaceRe := regexp.MustCompile(`\s+`)
+	compressed = spaceRe.ReplaceAllString(compressed, " ")
+
+	compressed = strings.TrimSpace(compressed)
+
+	if isJSON(compressed) {
+		compressed = compressJSON(compressed)
+	}
+
+	return compressed
+}
+
+// isJSON 检查字符串是否为 JSON 格式
+func isJSON(s string) bool {
+	var js json.RawMessage
+	return json.Unmarshal([]byte(s), &js) == nil
+}
+
+// compressJSON 压缩 JSON 字符串（去除所有空格）
+func compressJSON(jsonStr string) string {
+	var data interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+		return jsonStr
+	}
+	compressed, err := json.Marshal(data)
+	if err != nil {
+		return jsonStr
+	}
+	return string(compressed)
 }
