@@ -147,7 +147,7 @@ func runTests(paths []string) {
 
 	// 如果未指定路径，使用默认测试用例目录
 	if len(paths) == 0 {
-		paths = []string{config.AppConfig.Test.TestCaseDir}
+		paths = config.AppConfig.Test.TestCaseDir
 	}
 
 	// 解析 PSV/CSV 测试用例文件
@@ -585,7 +585,8 @@ log:
 
 test:
   report_dir: "./reports"
-  test_case_dir: "./testcases"
+  test_case_dir:
+    - "./testcases"
   data_dir: "./sql"
   severe_status:
     - 500

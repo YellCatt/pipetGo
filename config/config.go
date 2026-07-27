@@ -48,7 +48,7 @@ type LogConfig struct {
 // TestConfig 表示测试相关的配置
 type TestConfig struct {
 	ReportDir     string   `mapstructure:"report_dir"`     // 测试报告输出目录
-	TestCaseDir   string   `mapstructure:"test_case_dir"`  // 默认测试用例目录
+	TestCaseDir   []string `mapstructure:"test_case_dir"`  // 默认测试用例目录（支持多个）
 	DataDir       string   `mapstructure:"data_dir"`       // 数据存储目录（用于 CSV 文件）
 
 	SevereStatus  []int    `mapstructure:"severe_status"`  // 严重错误状态码列表，这些状态码的测试用例失败时优先于其他失败用例

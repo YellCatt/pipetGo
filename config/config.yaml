@@ -9,7 +9,8 @@ log:
 
 test:
   report_dir: "./reports"
-  test_case_dir: "./testcases"
+  test_case_dir:
+    - "./testcases"
   data_dir: "./sql"
   severe_status:
     - 500
