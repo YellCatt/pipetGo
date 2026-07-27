@@ -157,7 +157,6 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 		if result.Error != "" {
 			fmt.Printf("            Error: %s\n", result.Error)
 		}
-		go storage.RecordExecutionTime(tc.ID, tc.Desc, tc.FileName, vars.Replace(tc.URL), result.Duration, false)
 	}
 
 	// 执行后置条件（无论测试成功与否都会执行）
