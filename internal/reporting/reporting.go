@@ -111,31 +111,31 @@ func GenerateMonthReport(deviceName string, consecutiveFailN int, topSlowN int) 
 
 // FormatWeekReport 格式化周报为纯文本
 func (r *WeekReport) FormatWeekReport() string {
-	return r.formatReport("周报", "本周")
+	return formatReportText("周报", "本周", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
 }
 
 // FormatMonthReport 格式化月报为纯文本
 func (r *MonthReport) FormatMonthReport() string {
-	return r.formatReport("月报", "本月")
+	return formatReportText("月报", "本月", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
 }
 
-func (r *WeekReport) formatReport(reportType, periodLabel string) string {
+func formatReportText(reportType, periodLabel, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
 	var sb strings.Builder
 
 	divider := strings.Repeat("=", 68)
 	thinDivider := strings.Repeat("-", 68)
 
 	sb.WriteString(divider + "\n")
-	sb.WriteString(fmt.Sprintf("  pipetGo 测试%s  (%s ~ %s)\n", reportType, r.StartDate, r.EndDate))
+	sb.WriteString(fmt.Sprintf("  pipetGo 测试%s  (%s ~ %s)\n", reportType, startDate, endDate))
 	sb.WriteString(divider + "\n")
-	sb.WriteString(fmt.Sprintf("  设备: %s\n", r.DeviceName))
+	sb.WriteString(fmt.Sprintf("  设备: %s\n", deviceName))
 	sb.WriteString(fmt.Sprintf("  生成时间: %s\n\n", timeutil.FormatDateTime(timeutil.Now())))
 
 	// 汇总统计
-	if len(r.DailyStats) > 0 {
+	if len(dailyStats) > 0 {
 		total, passed, failed, skipped := 0, 0, 0, 0
 		var totalDur time.Duration
-		for _, d := range r.DailyStats {
+		for _, d := range dailyStats {
 			total += d.Total
 			passed += d.Passed
 			failed += d.Failed
@@ -154,25 +154,25 @@ func (r *WeekReport) formatReport(reportType, periodLabel string) string {
 	// 用例增长趋势图
 	sb.WriteString("\n" + thinDivider + "\n")
 	sb.WriteString("  [用例增长趋势图]\n")
-	sb.WriteString(renderCaseGrowthChart(r.DailyStats))
+	sb.WriteString(renderCaseGrowthChart(dailyStats))
 
 	// 错误率趋势图
 	sb.WriteString("\n" + thinDivider + "\n")
 	sb.WriteString("  [错误率趋势图]\n")
-	sb.WriteString(renderErrorRateChart(r.DailyStats))
+	sb.WriteString(renderErrorRateChart(dailyStats))
 
 	// 慢接口排名
-	if len(r.SlowCases) > 0 {
+	if len(slowCases) > 0 {
 		sb.WriteString("\n" + thinDivider + "\n")
-		sb.WriteString("  [最慢接口 TOP " + fmt.Sprintf("%d", len(r.SlowCases)) + "]\n")
-		sb.WriteString(renderSlowCases(r.SlowCases))
+		sb.WriteString("  [最慢接口 TOP " + fmt.Sprintf("%d", len(slowCases)) + "]\n")
+		sb.WriteString(renderSlowCases(slowCases))
 	}
 
 	// 连续失败告警
-	if len(r.AlertCases) > 0 {
+	if len(alertCases) > 0 {
 		sb.WriteString("\n" + thinDivider + "\n")
 		sb.WriteString("  ⚠️  [连续失败告警]\n")
-		sb.WriteString(renderAlertCases(r.AlertCases))
+		sb.WriteString(renderAlertCases(alertCases))
 	}
 
 	sb.WriteString("\n" + divider + "\n")
