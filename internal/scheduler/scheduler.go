@@ -55,6 +55,11 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 
 	if hasReport {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Error(fmt.Sprintf("Report scheduler panic recovered: %v", r))
+				}
+			}()
 			logger.Info(fmt.Sprintf("Report scheduler started, sending reports at %02d:%02d", sendHour, sendMinute))
 			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
@@ -73,6 +78,11 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 		intervalMinutes = 1440
 	}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(fmt.Sprintf("Test scheduler panic recovered: %v", r))
+			}
+		}()
 		interval := time.Duration(intervalMinutes) * time.Minute
 		logger.Info(fmt.Sprintf("Test scheduler started, running tests every %d minutes", intervalMinutes))
 

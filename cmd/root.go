@@ -533,7 +533,7 @@ func waitForScheduler() {
 	if !scheduler.IsRunning() {
 		return
 	}
-	logger.Info("Daemon mode: report scheduler is running, keeping process alive...")
+	logger.Info("Daemon mode: scheduler is running, keeping process alive...")
 	select {}
 }
 
