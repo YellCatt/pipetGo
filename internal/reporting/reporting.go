@@ -315,25 +315,25 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 
 // FormatWeekReportHTML 格式化周报为HTML（用于邮件）
 func (r *WeekReport) FormatWeekReportHTML() string {
-	return r.formatReportHTML("周报", "本周")
+	return formatReportHTML("周报", "本周", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
 }
 
 // FormatMonthReportHTML 格式化月报为HTML（用于邮件）
 func (r *MonthReport) FormatMonthReportHTML() string {
-	return r.formatReportHTML("月报", "本月")
+	return formatReportHTML("月报", "本月", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
 }
 
-func (r *WeekReport) formatReportHTML(reportType, periodLabel string) string {
+func formatReportHTML(reportType, periodLabel, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
 	var sb strings.Builder
 
 	sb.WriteString(`<html><body style="font-family: monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px;">`)
-	sb.WriteString(fmt.Sprintf(`<h2 style="color: #00d4ff;">pipetGo 测试%s (%s ~ %s)</h2>`, reportType, r.StartDate, r.EndDate))
-	sb.WriteString(fmt.Sprintf(`<p>设备: <b>%s</b> | 生成时间: %s</p>`, r.DeviceName, timeutil.FormatDateTime(timeutil.Now())))
+	sb.WriteString(fmt.Sprintf(`<h2 style="color: #00d4ff;">pipetGo 测试%s (%s ~ %s)</h2>`, reportType, startDate, endDate))
+	sb.WriteString(fmt.Sprintf(`<p>设备: <b>%s</b> | 生成时间: %s</p>`, deviceName, timeutil.FormatDateTime(timeutil.Now())))
 
-	if len(r.DailyStats) > 0 {
+	if len(dailyStats) > 0 {
 		total, passed, failed, skipped := 0, 0, 0, 0
 		var totalDur time.Duration
-		for _, d := range r.DailyStats {
+		for _, d := range dailyStats {
 			total += d.Total
 			passed += d.Passed
 			failed += d.Failed
@@ -351,25 +351,25 @@ func (r *WeekReport) formatReportHTML(reportType, periodLabel string) string {
 
 	sb.WriteString(`<h3>用例增长趋势</h3>`)
 	sb.WriteString(`<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">`)
-	sb.WriteString(renderCaseGrowthChart(r.DailyStats))
+	sb.WriteString(renderCaseGrowthChart(dailyStats))
 	sb.WriteString(`</pre>`)
 
 	sb.WriteString(`<h3>错误率趋势</h3>`)
 	sb.WriteString(`<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">`)
-	sb.WriteString(renderErrorRateChart(r.DailyStats))
+	sb.WriteString(renderErrorRateChart(dailyStats))
 	sb.WriteString(`</pre>`)
 
-	if len(r.SlowCases) > 0 {
-		sb.WriteString(`<h3>最慢接口 TOP ` + fmt.Sprintf("%d", len(r.SlowCases)) + `</h3>`)
+	if len(slowCases) > 0 {
+		sb.WriteString(`<h3>最慢接口 TOP ` + fmt.Sprintf("%d", len(slowCases)) + `</h3>`)
 		sb.WriteString(`<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">`)
-		sb.WriteString(renderSlowCases(r.SlowCases))
+		sb.WriteString(renderSlowCases(slowCases))
 		sb.WriteString(`</pre>`)
 	}
 
-	if len(r.AlertCases) > 0 {
+	if len(alertCases) > 0 {
 		sb.WriteString(`<h3 style="color: #ff4444;">⚠️ 连续失败告警</h3>`)
 		sb.WriteString(`<pre style="background: #2a0000; padding: 10px; border-radius: 4px; color: #ff6666;">`)
-		sb.WriteString(renderAlertCases(r.AlertCases))
+		sb.WriteString(renderAlertCases(alertCases))
 		sb.WriteString(`</pre>`)
 	}
 
