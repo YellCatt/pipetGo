@@ -52,12 +52,13 @@ type TestConfig struct {
 	TestCaseDir []string `mapstructure:"test_case_dir"` // 默认测试用例目录（支持多个）
 	DataDir     string   `mapstructure:"data_dir"`      // 数据存储目录（用于 CSV 文件）
 
-	SevereStatus []int    `mapstructure:"severe_status"` // 严重错误状态码列表，这些状态码的测试用例失败时优先于其他失败用例
-	GlobalPre    []string `mapstructure:"global_pre"`    // 全局前置条件测试用例ID列表（所有测试执行前运行）
-	GlobalPost   []string `mapstructure:"global_post"`   // 全局后置条件测试用例ID列表（所有测试执行后运行）
-	DeviceName   string   `mapstructure:"device_name"`   // 测试设备名称（未配置时自动使用主机名）
-	Rounds       int      `mapstructure:"rounds"`        // 多轮测试次数，默认为1（单次测试）
-	IntervalMs   int      `mapstructure:"interval_ms"`   // 轮间间隔时间（毫秒），默认为0
+	SevereStatus            []int    `mapstructure:"severe_status"`             // 严重错误状态码列表，这些状态码的测试用例失败时优先于其他失败用例
+	GlobalPre               []string `mapstructure:"global_pre"`                // 全局前置条件测试用例ID列表（所有测试执行前运行）
+	GlobalPost              []string `mapstructure:"global_post"`               // 全局后置条件测试用例ID列表（所有测试执行后运行）
+	DeviceName              string   `mapstructure:"device_name"`               // 测试设备名称（未配置时自动使用主机名）
+	Rounds                  int      `mapstructure:"rounds"`                    // 多轮测试次数，默认为1（单次测试）
+	IntervalMs              int      `mapstructure:"interval_ms"`               // 轮间间隔时间（毫秒），默认为0
+	ScheduleIntervalMinutes int      `mapstructure:"schedule_interval_minutes"` // 定时执行测试间隔（分钟），0 表示不启用定时执行
 }
 
 // EmailConfig 表示邮件发送相关的配置

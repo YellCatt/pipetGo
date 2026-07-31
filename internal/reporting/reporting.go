@@ -1,4 +1,4 @@
-// Package reporting 提供周报月报生成、趋势图（ASCII）和慢接口分析功能
+// Package reporting 提供周报月报年报生成、趋势图（ASCII）和慢接口分析功能
 package reporting
 
 import (

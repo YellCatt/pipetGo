@@ -17,6 +17,7 @@ import (
 	"pipetGo/internal/logger"
 	"pipetGo/internal/psv"
 	"pipetGo/internal/reporting"
+	"pipetGo/internal/scheduler"
 	"pipetGo/internal/storage"
 	"pipetGo/internal/testcase"
 	"pipetGo/internal/timeutil"
@@ -31,7 +32,11 @@ var (
 		Long:  `A powerful enterprise-grade API testing tool written in Go.`,
 		Args:  cobra.ArbitraryArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runTests(args)
+			if sendWeeklyFlag || sendMonthlyFlag || sendYearlyFlag {
+				runSendReports()
+			} else {
+				runTests(args)
+			}
 		},
 	}
 
@@ -43,6 +48,11 @@ var (
 
 	// intervalMsFlag 存储命令行指定的轮间间隔时间（毫秒）
 	intervalMsFlag int
+
+	// 报告发送命令行标志
+	sendWeeklyFlag  bool
+	sendMonthlyFlag bool
+	sendYearlyFlag  bool
 )
 
 // Execute 启动命令行应用
@@ -68,6 +78,10 @@ func init() {
 	rootCmd.Flags().StringVarP(&tagsFlag, "tags", "t", "", "filter tests by tags (comma-separated)")
 	rootCmd.Flags().IntVarP(&roundsFlag, "rounds", "r", 0, "number of test rounds (default from config)")
 	rootCmd.Flags().IntVarP(&intervalMsFlag, "interval", "i", 0, "interval between rounds in milliseconds (default from config)")
+
+	rootCmd.Flags().BoolVar(&sendWeeklyFlag, "send-weekly", false, "立即发送周报邮件")
+	rootCmd.Flags().BoolVar(&sendMonthlyFlag, "send-monthly", false, "立即发送月报邮件")
+	rootCmd.Flags().BoolVar(&sendYearlyFlag, "send-yearly", false, "立即发送年报邮件")
 
 	rootCmd.AddCommand(reportCmd)
 }
@@ -108,6 +122,52 @@ func runReport() {
 	}
 
 	fmt.Print(reporting.GenerateASCIIReport(deviceName, consecutiveFailN, topSlowN))
+	waitForScheduler()
+}
+
+// runSendReports 根据命令行标志发送指定的报告邮件
+func runSendReports() {
+	initConfig()
+	initStorage()
+
+	cfg := config.AppConfig.Reporting
+	consecutiveFailN := cfg.ConsecutiveFailN
+	if consecutiveFailN <= 0 {
+		consecutiveFailN = 3
+	}
+	topSlowN := cfg.TopSlowN
+	if topSlowN <= 0 {
+		topSlowN = 10
+	}
+
+	if sendWeeklyFlag {
+		logger.Info("Sending weekly report...")
+		if err := email.SendWeeklyReportEmail(consecutiveFailN, topSlowN); err != nil {
+			logger.Error("Failed to send weekly report", zap.Error(err))
+		} else {
+			logger.Info("Weekly report sent successfully")
+		}
+	}
+
+	if sendMonthlyFlag {
+		logger.Info("Sending monthly report...")
+		if err := email.SendMonthlyReportEmail(consecutiveFailN, topSlowN); err != nil {
+			logger.Error("Failed to send monthly report", zap.Error(err))
+		} else {
+			logger.Info("Monthly report sent successfully")
+		}
+	}
+
+	if sendYearlyFlag {
+		logger.Info("Sending yearly report...")
+		if err := email.SendYearlyReportEmail(consecutiveFailN, topSlowN); err != nil {
+			logger.Error("Failed to send yearly report", zap.Error(err))
+		} else {
+			logger.Info("Yearly report sent successfully")
+		}
+	}
+
+	waitForScheduler()
 }
 
 // initConfig 初始化应用配置
@@ -145,9 +205,22 @@ func initConfig() {
 		SMTPPort:   config.AppConfig.Email.SMTPPort,
 		DeviceName: config.AppConfig.Test.DeviceName,
 	})
-}
 
-// maskVars 用于日志中掩码敏感变量值
+	scheduler.Start(
+		config.AppConfig.Test.DataDir,
+		scheduler.Config{
+			ConsecutiveFailN:    config.AppConfig.Reporting.ConsecutiveFailN,
+			TopSlowN:            config.AppConfig.Reporting.TopSlowN,
+			WeeklyEnabled:       config.AppConfig.Reporting.WeeklyEnabled,
+			MonthlyEnabled:      config.AppConfig.Reporting.MonthlyEnabled,
+			YearlyEnabled:       config.AppConfig.Reporting.YearlyEnabled,
+			TestIntervalMinutes: config.AppConfig.Test.ScheduleIntervalMinutes,
+		},
+		func() {
+			runTestCycle(nil)
+		},
+	)
+}
 func maskVars(vars map[string]string) map[string]string {
 	result := make(map[string]string)
 	for k, v := range vars {
@@ -164,9 +237,9 @@ func maskString(s string) string {
 	return s[:4] + "***" + s[len(s)-4:]
 }
 
-// runTests 执行测试主流程
+// runTestCycle 执行一轮完整的测试流程（不阻塞，用于定时调度）
 // paths: 用户指定的测试用例路径列表
-func runTests(paths []string) {
+func runTestCycle(paths []string) {
 	// 初始化 HTTP 客户端
 	httpclient.InitClient()
 
@@ -447,10 +520,21 @@ func runTests(paths []string) {
 	if err := email.SendTestReportEmailWithAlerts(allRoundResults, consecutiveFailN, reportingCfg.TopSlowN); err != nil {
 		logger.Warn("Failed to send HTML email report", zap.Error(err))
 	}
+}
 
-	if failedCount > 0 {
-		os.Exit(1)
+// runTests 执行测试主流程，完成后进入 daemon 等待
+func runTests(paths []string) {
+	runTestCycle(paths)
+	waitForScheduler()
+}
+
+// waitForScheduler 如果调度器正在运行，则阻塞保持进程存活（daemon 模式）
+func waitForScheduler() {
+	if !scheduler.IsRunning() {
+		return
 	}
+	logger.Info("Daemon mode: report scheduler is running, keeping process alive...")
+	select {}
 }
 
 // calculateEstimatedDuration 根据历史执行时间计算预估总耗时
