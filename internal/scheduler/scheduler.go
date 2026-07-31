@@ -44,14 +44,14 @@ type TestRunner func()
 
 func Start(dataDir string, cfg Config, runner TestRunner) {
 	hasReport := cfg.WeeklyEnabled || cfg.MonthlyEnabled || cfg.YearlyEnabled
-	hasTest := cfg.TestIntervalMinutes > 0 && runner != nil
 
-	if !hasReport && !hasTest {
-		logger.Info("Scheduler not started: no reports or test scheduling enabled")
+	if runner == nil {
+		logger.Info("Scheduler not started: no test runner provided")
 		return
 	}
 
 	loadState(dataDir)
+	running = true
 
 	if hasReport {
 		go func() {
@@ -59,27 +59,41 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
 
-			running = true
 			for range ticker.C {
 				checkAndSendReports(dataDir, cfg)
 			}
 		}()
 	}
 
-	if hasTest {
-		running = true
-		go func() {
-			interval := time.Duration(cfg.TestIntervalMinutes) * time.Minute
-			logger.Info(fmt.Sprintf("Test scheduler started, running tests every %d minutes", cfg.TestIntervalMinutes))
-			ticker := time.NewTicker(interval)
-			defer ticker.Stop()
-
-			for range ticker.C {
-				logger.Info("Running scheduled test cycle...")
-				runner()
-			}
-		}()
+	// 测试循环：默认每24小时（1440分钟）执行一轮
+	// 首轮由 runTests 直接执行，调度器先等待一个间隔后再开始循环
+	// 如果本轮耗时超过间隔，则完成后立即开始下一轮
+	intervalMinutes := cfg.TestIntervalMinutes
+	if intervalMinutes <= 0 {
+		intervalMinutes = 1440
 	}
+	go func() {
+		interval := time.Duration(intervalMinutes) * time.Minute
+		logger.Info(fmt.Sprintf("Test scheduler started, running tests every %d minutes", intervalMinutes))
+
+		// 首次等待一个完整间隔（首轮已由 runTests 执行）
+		time.Sleep(interval)
+
+		for {
+			cycleStart := time.Now()
+			logger.Info("Running scheduled test cycle...")
+			runner()
+			elapsed := time.Since(cycleStart)
+
+			if elapsed < interval {
+				waitTime := interval - elapsed
+				logger.Info(fmt.Sprintf("Test cycle completed in %v, waiting %v until next cycle", elapsed.Round(time.Second), waitTime.Round(time.Second)))
+				time.Sleep(waitTime)
+			} else {
+				logger.Info(fmt.Sprintf("Test cycle completed in %v (exceeds interval), starting next cycle immediately", elapsed.Round(time.Second)))
+			}
+		}
+	}()
 }
 
 func IsRunning() bool {
