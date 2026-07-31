@@ -88,6 +88,7 @@ type ReportingConfig struct {
 	TopSlowN         int  `mapstructure:"top_slow_n"`         // 慢接口排名 TOP N
 	WeeklyEnabled    bool `mapstructure:"weekly_enabled"`     // 是否启用周报
 	MonthlyEnabled   bool `mapstructure:"monthly_enabled"`    // 是否启用月报
+	YearlyEnabled    bool `mapstructure:"yearly_enabled"`     // 是否启用年报
 	DailySummary     bool `mapstructure:"daily_summary"`      // 是否启用每日汇总记录
 }
 

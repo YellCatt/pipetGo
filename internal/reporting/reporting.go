@@ -36,6 +36,16 @@ type MonthReport struct {
 	DeviceName string
 }
 
+// YearReport 表示年报内容
+type YearReport struct {
+	StartDate  string
+	EndDate    string
+	DailyStats []storage.DailySummary
+	SlowCases  []storage.CaseAvgDuration
+	AlertCases []storage.ConsecutiveFailureInfo
+	DeviceName string
+}
+
 // GenerateWeekReport 生成本周报告
 func GenerateWeekReport(deviceName string, consecutiveFailN int, topSlowN int) (*WeekReport, error) {
 	now := timeutil.Now()
@@ -109,6 +119,40 @@ func GenerateMonthReport(deviceName string, consecutiveFailN int, topSlowN int) 
 	}, nil
 }
 
+// GenerateYearReport 生成本年报告
+func GenerateYearReport(deviceName string, consecutiveFailN int, topSlowN int) (*YearReport, error) {
+	now := timeutil.Now()
+	startDate := now.Format("2006") + "-01-01"
+	endDate := now.Format("2006-01-02")
+
+	stats, err := storage.GetDailySummaries(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	slowCases, err := storage.GetCaseAverageDurations("desc")
+	if err != nil {
+		slowCases = nil
+	}
+	if topSlowN > 0 && len(slowCases) > topSlowN {
+		slowCases = slowCases[:topSlowN]
+	}
+
+	alertCases, err := storage.GetConsecutiveFailures(consecutiveFailN)
+	if err != nil {
+		alertCases = nil
+	}
+
+	return &YearReport{
+		StartDate:  startDate,
+		EndDate:    endDate,
+		DailyStats: stats,
+		SlowCases:  slowCases,
+		AlertCases: alertCases,
+		DeviceName: deviceName,
+	}, nil
+}
+
 // FormatWeekReport 格式化周报为纯文本
 func (r *WeekReport) FormatWeekReport() string {
 	return formatReportText("周报", "本周", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
@@ -117,6 +161,11 @@ func (r *WeekReport) FormatWeekReport() string {
 // FormatMonthReport 格式化月报为纯文本
 func (r *MonthReport) FormatMonthReport() string {
 	return formatReportText("月报", "本月", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+}
+
+// FormatYearReport 格式化年报为纯文本
+func (r *YearReport) FormatYearReport() string {
+	return formatReportText("年报", "本年", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
 }
 
 func formatReportText(reportType, periodLabel, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
@@ -321,6 +370,11 @@ func (r *WeekReport) FormatWeekReportHTML() string {
 // FormatMonthReportHTML 格式化月报为HTML（用于邮件）
 func (r *MonthReport) FormatMonthReportHTML() string {
 	return formatReportHTML("月报", "本月", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+}
+
+// FormatYearReportHTML 格式化年报为HTML（用于邮件）
+func (r *YearReport) FormatYearReportHTML() string {
+	return formatReportHTML("年报", "本年", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
 }
 
 func formatReportHTML(reportType, periodLabel, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {

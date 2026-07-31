@@ -431,6 +431,30 @@ func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
 	return SendHTMLEmail(subject, htmlBody)
 }
 
+// SendYearlyReportEmail 发送年报邮件
+func SendYearlyReportEmail(consecutiveFailN int, topSlowN int) error {
+	if !Config.Enabled {
+		log.Println("邮件发送功能已禁用，跳过年报邮件发送")
+		return nil
+	}
+	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+		log.Println("邮件配置未设置，跳过年报邮件发送")
+		return nil
+	}
+
+	report, err := reporting.GenerateYearReport(getDeviceName(), consecutiveFailN, topSlowN)
+	if err != nil {
+		log.Printf("生成年报失败: %v\n", err)
+		return err
+	}
+
+	subject := fmt.Sprintf("【测试年报】pipetGo - %s (%s ~ %s)", getDeviceName(), report.StartDate, report.EndDate)
+	htmlBody := report.FormatYearReportHTML()
+
+	log.Println("发送测试年报邮件...")
+	return SendHTMLEmail(subject, htmlBody)
+}
+
 // SendTestReportEmailWithAlerts 发送测试报告邮件，包含连续失败标红告警
 func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFailN int, topSlowN int) error {
 	if !Config.Enabled {

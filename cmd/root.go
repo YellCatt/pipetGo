@@ -717,6 +717,7 @@ reporting:
   top_slow_n: 10
   weekly_enabled: true
   monthly_enabled: true
+  yearly_enabled: true
   daily_summary: true
 `
 
