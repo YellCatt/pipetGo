@@ -55,7 +55,7 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 
 	if hasReport {
 		go func() {
-			logger.Info("Report scheduler started, sending reports at %02d:%02d", sendHour, sendMinute)
+			logger.Info(fmt.Sprintf("Report scheduler started, sending reports at %02d:%02d", sendHour, sendMinute))
 			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
 
@@ -70,7 +70,7 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 		running = true
 		go func() {
 			interval := time.Duration(cfg.TestIntervalMinutes) * time.Minute
-			logger.Info("Test scheduler started, running tests every %d minutes", cfg.TestIntervalMinutes)
+			logger.Info(fmt.Sprintf("Test scheduler started, running tests every %d minutes", cfg.TestIntervalMinutes))
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
 
