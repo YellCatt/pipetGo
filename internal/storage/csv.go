@@ -44,6 +44,17 @@ var (
 		"execution_count",
 		"last_updated",
 	}
+
+	dailyHeader = []string{
+		"date",
+		"total",
+		"passed",
+		"failed",
+		"skipped",
+		"error_rate",
+		"total_duration_ms",
+		"unique_cases",
+	}
 )
 
 // InitDB 初始化 CSV 数据目录（单例模式，保持与原 SQLite 接口一致）
@@ -85,10 +96,15 @@ func initCSVInternal(dir string) error {
 		logger.Error("初始化平均时间 CSV 失败", zap.Error(err))
 		return err
 	}
+	if err := ensureCSV(dailyCSVPath(), dailyHeader); err != nil {
+		logger.Error("初始化每日汇总 CSV 失败", zap.Error(err))
+		return err
+	}
 
 	logger.Info("CSV 存储初始化成功",
 		zap.String("executionCSV", executionCSVPath()),
-		zap.String("averageCSV", averageCSVPath()))
+		zap.String("averageCSV", averageCSVPath()),
+		zap.String("dailyCSV", dailyCSVPath()))
 	return nil
 }
 
@@ -98,6 +114,10 @@ func executionCSVPath() string {
 
 func averageCSVPath() string {
 	return filepath.Join(dataDir, "test_average_times.csv")
+}
+
+func dailyCSVPath() string {
+	return filepath.Join(dataDir, "test_daily_summary.csv")
 }
 
 // ensureCSV 如果 CSV 文件不存在或为空，则创建并写入表头
@@ -490,4 +510,315 @@ func GetAllStoredAverages() ([]map[string]interface{}, error) {
 	}
 
 	return averages, nil
+}
+
+// DailySummary 表示单日测试汇总
+type DailySummary struct {
+	Date            string
+	Total           int
+	Passed          int
+	Failed          int
+	Skipped         int
+	ErrorRate       float64
+	TotalDurationMs int64
+	UniqueCases     int
+}
+
+// RecordDailySummary 记录单日汇总
+func RecordDailySummary(date string, total, passed, failed, skipped int, totalDuration time.Duration) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if dataDir == "" {
+		return fmt.Errorf("storage not initialized")
+	}
+
+	uniqueCases, _ := countUniqueCaseIDsOnDate(date)
+	var errorRate float64
+	if total > 0 {
+		errorRate = float64(failed) / float64(total) * 100
+	}
+
+	record := []string{
+		date,
+		strconv.Itoa(total),
+		strconv.Itoa(passed),
+		strconv.Itoa(failed),
+		strconv.Itoa(skipped),
+		strconv.FormatFloat(errorRate, 'f', 2, 64),
+		strconv.FormatInt(int64(totalDuration/time.Millisecond), 10),
+		strconv.Itoa(uniqueCases),
+	}
+
+	return appendRecord(dailyCSVPath(), record)
+}
+
+func countUniqueCaseIDsOnDate(date string) (int, error) {
+	_, records, err := readRecords(executionCSVPath())
+	if err != nil {
+		return 0, err
+	}
+	seen := make(map[string]bool)
+	for _, rec := range records {
+		if len(rec) < 7 {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(rec[6]), date) {
+			seen[rec[0]] = true
+		}
+	}
+	return len(seen), nil
+}
+
+// GetDailySummaries 获取指定时间范围内的每日汇总
+func GetDailySummaries(fromDate, toDate string) ([]DailySummary, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if dataDir == "" {
+		return nil, fmt.Errorf("storage not initialized")
+	}
+
+	_, records, err := readRecords(dailyCSVPath())
+	if err != nil {
+		return nil, err
+	}
+
+	var summaries []DailySummary
+	for _, rec := range records {
+		if len(rec) < 8 {
+			continue
+		}
+		date := strings.TrimSpace(rec[0])
+		if fromDate != "" && date < fromDate {
+			continue
+		}
+		if toDate != "" && date > toDate {
+			continue
+		}
+		summaries = append(summaries, DailySummary{
+			Date:            date,
+			Total:           int(parseInt64(rec[1])),
+			Passed:          int(parseInt64(rec[2])),
+			Failed:          int(parseInt64(rec[3])),
+			Skipped:         int(parseInt64(rec[4])),
+			ErrorRate:       parseFloat64(rec[5]),
+			TotalDurationMs: parseInt64(rec[6]),
+			UniqueCases:     int(parseInt64(rec[7])),
+		})
+	}
+
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].Date < summaries[j].Date
+	})
+	return summaries, nil
+}
+
+// CaseAvgDuration 表示单个用例的平均耗时（用于排序展示）
+type CaseAvgDuration struct {
+	TestCaseID        string
+	TestCaseDesc      string
+	FileName          string
+	URL               string
+	AverageDurationMs float64
+	ExecutionCount    int
+}
+
+// GetCaseAverageDurations 获取每个测试用例的平均耗时（含慢接口排名）
+func GetCaseAverageDurations(order string) ([]CaseAvgDuration, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if dataDir == "" {
+		return nil, fmt.Errorf("storage not initialized")
+	}
+
+	_, records, err := readRecords(executionCSVPath())
+	if err != nil {
+		return nil, err
+	}
+
+	type agg struct {
+		id   string
+		desc string
+		file string
+		url  string
+		sum  int64
+		n    int
+	}
+	groups := make(map[string]*agg)
+
+	for _, rec := range records {
+		if len(rec) < 7 {
+			continue
+		}
+		id := rec[0]
+		g, ok := groups[id]
+		if !ok {
+			g = &agg{
+				id:   id,
+				desc: rec[1],
+				file: rec[2],
+				url:  rec[3],
+			}
+			groups[id] = g
+		}
+		g.sum += parseInt64(rec[4])
+		g.n++
+	}
+
+	var result []CaseAvgDuration
+	for _, g := range groups {
+		if g.n == 0 {
+			continue
+		}
+		avg := float64(g.sum) / float64(g.n)
+		result = append(result, CaseAvgDuration{
+			TestCaseID:        g.id,
+			TestCaseDesc:      g.desc,
+			FileName:          g.file,
+			URL:               g.url,
+			AverageDurationMs: avg,
+			ExecutionCount:    g.n,
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if order == "asc" {
+			return result[i].AverageDurationMs < result[j].AverageDurationMs
+		}
+		return result[i].AverageDurationMs > result[j].AverageDurationMs
+	})
+
+	return result, nil
+}
+
+// ConsecutiveFailureInfo 表示用例连续失败情况
+type ConsecutiveFailureInfo struct {
+	TestCaseID    string
+	TestCaseDesc  string
+	FileName      string
+	URL           string
+	RecentResults []bool
+	FailCount     int
+	LastExecuted  string
+}
+
+// GetConsecutiveFailures 获取每个用例最近N次执行结果，返回连续失败达到阈值的用例
+func GetConsecutiveFailures(n int) ([]ConsecutiveFailureInfo, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if dataDir == "" {
+		return nil, fmt.Errorf("storage not initialized")
+	}
+
+	_, records, err := readRecords(executionCSVPath())
+	if err != nil {
+		return nil, err
+	}
+
+	type recInfo struct {
+		success bool
+		time    string
+	}
+	groups := make(map[string][]recInfo)
+	meta := make(map[string]struct{ desc, file, url string })
+
+	for _, rec := range records {
+		if len(rec) < 7 {
+			continue
+		}
+		id := rec[0]
+		meta[id] = struct{ desc, file, url string }{rec[1], rec[2], rec[3]}
+		groups[id] = append(groups[id], recInfo{
+			success: parseSuccess(rec[5]),
+			time:    rec[6],
+		})
+	}
+
+	var alerts []ConsecutiveFailureInfo
+	for id, hist := range groups {
+		sort.Slice(hist, func(i, j int) bool {
+			return hist[i].time > hist[j].time
+		})
+		window := hist
+		if len(window) > n {
+			window = window[:n]
+		}
+		if len(window) < n {
+			continue
+		}
+		allFail := true
+		for _, r := range window {
+			if r.success {
+				allFail = false
+				break
+			}
+		}
+		if !allFail {
+			continue
+		}
+		m := meta[id]
+		info := ConsecutiveFailureInfo{
+			TestCaseID:   id,
+			TestCaseDesc: m.desc,
+			FileName:     m.file,
+			URL:          m.url,
+			FailCount:    len(window),
+			LastExecuted: window[0].time,
+		}
+		for i := len(window) - 1; i >= 0; i-- {
+			info.RecentResults = append(info.RecentResults, window[i].success)
+		}
+		alerts = append(alerts, info)
+	}
+
+	sort.Slice(alerts, func(i, j int) bool {
+		return alerts[i].FailCount > alerts[j].FailCount
+	})
+	return alerts, nil
+}
+
+// GetExecutionHistory 获取指定用例最近 limit 次执行历史
+func GetExecutionHistory(testCaseID string, limit int) ([]map[string]interface{}, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if dataDir == "" {
+		return nil, fmt.Errorf("storage not initialized")
+	}
+
+	_, records, err := readRecords(executionCSVPath())
+	if err != nil {
+		return nil, err
+	}
+
+	var history []map[string]interface{}
+	for _, rec := range records {
+		if len(rec) < 7 {
+			continue
+		}
+		if rec[0] != testCaseID {
+			continue
+		}
+		history = append(history, map[string]interface{}{
+			"test_case_id":   rec[0],
+			"test_case_desc": rec[1],
+			"file_name":      rec[2],
+			"url":            rec[3],
+			"duration_ms":    parseInt64(rec[4]),
+			"success":        parseSuccess(rec[5]),
+			"executed_at":    rec[6],
+		})
+	}
+
+	sort.Slice(history, func(i, j int) bool {
+		return history[i]["executed_at"].(string) > history[j]["executed_at"].(string)
+	})
+
+	if len(history) > limit {
+		history = history[:limit]
+	}
+	return history, nil
 }

@@ -16,13 +16,14 @@ var CfgFile string
 
 // Config 表示应用程序的完整配置
 type Config struct {
-	Target  TargetConfig      `mapstructure:"target"`  // 目标 API 配置
-	Log     LogConfig         `mapstructure:"log"`     // 日志配置
-	Test    TestConfig        `mapstructure:"test"`    // 测试配置
-	HTTP    HTTPConfig        `mapstructure:"http"`    // HTTP 客户端配置
-	Email   EmailConfig       `mapstructure:"email"`   // 邮件配置
-	Cleaner CleanupConfig     `mapstructure:"cleaner"` // 自动清理配置
-	Vars    map[string]string `mapstructure:"vars"`    // 用户自定义变量（用于替换测试用例中的 {{var}}）
+	Target    TargetConfig      `mapstructure:"target"`    // 目标 API 配置
+	Log       LogConfig         `mapstructure:"log"`       // 日志配置
+	Test      TestConfig        `mapstructure:"test"`      // 测试配置
+	HTTP      HTTPConfig        `mapstructure:"http"`      // HTTP 客户端配置
+	Email     EmailConfig       `mapstructure:"email"`     // 邮件配置
+	Cleaner   CleanupConfig     `mapstructure:"cleaner"`   // 自动清理配置
+	Reporting ReportingConfig   `mapstructure:"reporting"` // 报告和告警配置
+	Vars      map[string]string `mapstructure:"vars"`      // 用户自定义变量（用于替换测试用例中的 {{var}}）
 }
 
 // HTTPConfig 表示 HTTP 客户端的配置
@@ -47,26 +48,26 @@ type LogConfig struct {
 
 // TestConfig 表示测试相关的配置
 type TestConfig struct {
-	ReportDir     string   `mapstructure:"report_dir"`     // 测试报告输出目录
-	TestCaseDir   []string `mapstructure:"test_case_dir"`  // 默认测试用例目录（支持多个）
-	DataDir       string   `mapstructure:"data_dir"`       // 数据存储目录（用于 CSV 文件）
+	ReportDir   string   `mapstructure:"report_dir"`    // 测试报告输出目录
+	TestCaseDir []string `mapstructure:"test_case_dir"` // 默认测试用例目录（支持多个）
+	DataDir     string   `mapstructure:"data_dir"`      // 数据存储目录（用于 CSV 文件）
 
-	SevereStatus  []int    `mapstructure:"severe_status"`  // 严重错误状态码列表，这些状态码的测试用例失败时优先于其他失败用例
-	GlobalPre     []string `mapstructure:"global_pre"`     // 全局前置条件测试用例ID列表（所有测试执行前运行）
-	GlobalPost    []string `mapstructure:"global_post"`    // 全局后置条件测试用例ID列表（所有测试执行后运行）
-	DeviceName    string   `mapstructure:"device_name"`    // 测试设备名称（未配置时自动使用主机名）
-	Rounds        int      `mapstructure:"rounds"`         // 多轮测试次数，默认为1（单次测试）
-	IntervalMs    int      `mapstructure:"interval_ms"`    // 轮间间隔时间（毫秒），默认为0
+	SevereStatus []int    `mapstructure:"severe_status"` // 严重错误状态码列表，这些状态码的测试用例失败时优先于其他失败用例
+	GlobalPre    []string `mapstructure:"global_pre"`    // 全局前置条件测试用例ID列表（所有测试执行前运行）
+	GlobalPost   []string `mapstructure:"global_post"`   // 全局后置条件测试用例ID列表（所有测试执行后运行）
+	DeviceName   string   `mapstructure:"device_name"`   // 测试设备名称（未配置时自动使用主机名）
+	Rounds       int      `mapstructure:"rounds"`        // 多轮测试次数，默认为1（单次测试）
+	IntervalMs   int      `mapstructure:"interval_ms"`   // 轮间间隔时间（毫秒），默认为0
 }
 
 // EmailConfig 表示邮件发送相关的配置
 type EmailConfig struct {
-	Enabled    bool     `mapstructure:"enabled"`    // 是否启用邮件发送
-	From       string   `mapstructure:"from"`       // 发件人邮箱
-	To         []string `mapstructure:"to"`         // 收件人邮箱列表
-	AuthCode   string   `mapstructure:"auth_code"`  // 邮箱授权码
+	Enabled    bool     `mapstructure:"enabled"`     // 是否启用邮件发送
+	From       string   `mapstructure:"from"`        // 发件人邮箱
+	To         []string `mapstructure:"to"`          // 收件人邮箱列表
+	AuthCode   string   `mapstructure:"auth_code"`   // 邮箱授权码
 	SMTPServer string   `mapstructure:"smtp_server"` // SMTP 服务器地址
-	SMTPPort   int      `mapstructure:"smtp_port"`  // SMTP 端口
+	SMTPPort   int      `mapstructure:"smtp_port"`   // SMTP 端口
 }
 
 // CleanupConfig 表示自动清理相关的配置
@@ -79,6 +80,15 @@ type CleanupConfig struct {
 	IncludePatterns []string `mapstructure:"include_patterns"` // 要清理的文件模式列表（如 *.log, *.json）
 	ExcludePatterns []string `mapstructure:"exclude_patterns"` // 排除的文件模式列表
 	IntervalHours   int      `mapstructure:"interval_hours"`   // 定时清理间隔（小时）
+}
+
+// ReportingConfig 表示报告和告警相关的配置
+type ReportingConfig struct {
+	ConsecutiveFailN int  `mapstructure:"consecutive_fail_n"` // 连续失败N轮告警阈值
+	TopSlowN         int  `mapstructure:"top_slow_n"`         // 慢接口排名 TOP N
+	WeeklyEnabled    bool `mapstructure:"weekly_enabled"`     // 是否启用周报
+	MonthlyEnabled   bool `mapstructure:"monthly_enabled"`    // 是否启用月报
+	DailySummary     bool `mapstructure:"daily_summary"`      // 是否启用每日汇总记录
 }
 
 // AppConfig 存储全局配置实例

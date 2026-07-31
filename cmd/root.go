@@ -16,6 +16,7 @@ import (
 	"pipetGo/internal/httpclient"
 	"pipetGo/internal/logger"
 	"pipetGo/internal/psv"
+	"pipetGo/internal/reporting"
 	"pipetGo/internal/storage"
 	"pipetGo/internal/testcase"
 	"pipetGo/internal/timeutil"
@@ -67,6 +68,46 @@ func init() {
 	rootCmd.Flags().StringVarP(&tagsFlag, "tags", "t", "", "filter tests by tags (comma-separated)")
 	rootCmd.Flags().IntVarP(&roundsFlag, "rounds", "r", 0, "number of test rounds (default from config)")
 	rootCmd.Flags().IntVarP(&intervalMsFlag, "interval", "i", 0, "interval between rounds in milliseconds (default from config)")
+
+	rootCmd.AddCommand(reportCmd)
+}
+
+var reportCmd = &cobra.Command{
+	Use:   "report",
+	Short: "生成ASCII测试报告（含趋势图、慢接口排名、告警）",
+	Long:  `生成包含用例增长趋势图、错误率趋势图、慢接口排名、连续失败告警的ASCII综合报告`,
+	Run: func(cmd *cobra.Command, args []string) {
+		initConfig()
+		initStorage()
+		runReport()
+	},
+}
+
+func initStorage() {
+	httpclient.InitClient()
+	if err := storage.InitDB(config.AppConfig.Test.DataDir); err != nil {
+		logger.Warn("CSV storage init failed", zap.Error(err))
+	}
+}
+
+func runReport() {
+	cfg := config.AppConfig.Reporting
+	consecutiveFailN := cfg.ConsecutiveFailN
+	if consecutiveFailN <= 0 {
+		consecutiveFailN = 3
+	}
+	topSlowN := cfg.TopSlowN
+	if topSlowN <= 0 {
+		topSlowN = 10
+	}
+
+	deviceName := config.AppConfig.Test.DeviceName
+	if deviceName == "" {
+		hostname, _ := os.Hostname()
+		deviceName = hostname
+	}
+
+	fmt.Print(reporting.GenerateASCIIReport(deviceName, consecutiveFailN, topSlowN))
 }
 
 // initConfig 初始化应用配置
@@ -348,15 +389,63 @@ func runTests(paths []string) {
 
 	// 如果有失败的测试用例，退出码设为 1
 	failedCount := 0
+	passedCount := 0
+	skippedCount := 0
+	var totalDuration time.Duration
 	for _, r := range allRoundResults {
 		if !r.Passed && !r.TestCase.Skip {
 			failedCount++
+		} else if r.Passed && !r.TestCase.Skip {
+			passedCount++
+		} else if r.TestCase.Skip {
+			skippedCount++
+		}
+		totalDuration += r.Duration
+	}
+
+	// 记录每日汇总
+	reportingCfg := config.AppConfig.Reporting
+	if reportingCfg.DailySummary {
+		todayStr := timeutil.Now().Format("2006-01-02")
+		if err := storage.RecordDailySummary(todayStr, passedCount+failedCount+skippedCount, passedCount, failedCount, skippedCount, totalDuration); err != nil {
+			logger.Warn("Failed to record daily summary", zap.Error(err))
+		} else {
+			logger.Info("Daily summary recorded", zap.String("date", todayStr))
 		}
 	}
 
-	// 测试结束后发送邮件报告
-	if err := email.SendTestReportEmail(allRoundResults); err != nil {
-		logger.Warn("Failed to send email report", zap.Error(err))
+	// 打印慢接口排名
+	slowCases, _ := storage.GetCaseAverageDurations("desc")
+	if reportingCfg.TopSlowN > 0 && len(slowCases) > reportingCfg.TopSlowN {
+		slowCases = slowCases[:reportingCfg.TopSlowN]
+	}
+	if len(slowCases) > 0 {
+		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
+		fmt.Printf("║              最慢接口 TOP %d                             ║\n", len(slowCases))
+		fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
+		fmt.Printf(reporting.FormatCaseDurationTable(slowCases))
+		fmt.Println()
+	}
+
+	// 连续失败告警检查
+	consecutiveFailN := reportingCfg.ConsecutiveFailN
+	if consecutiveFailN <= 0 {
+		consecutiveFailN = 3
+	}
+	alerts, _ := storage.GetConsecutiveFailures(consecutiveFailN)
+	if len(alerts) > 0 {
+		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
+		fmt.Printf("║  ⚠️  连续失败告警 (连续%d轮)                            ║\n", consecutiveFailN)
+		fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
+		for _, a := range alerts {
+			fmt.Printf("  ❌ %s - %s (最近执行: %s)\n", a.TestCaseID, a.TestCaseDesc, a.LastExecuted)
+		}
+		fmt.Println()
+	}
+
+	// 测试结束后发送HTML邮件报告（含连续失败标红告警）
+	if err := email.SendTestReportEmailWithAlerts(allRoundResults, consecutiveFailN, reportingCfg.TopSlowN); err != nil {
+		logger.Warn("Failed to send HTML email report", zap.Error(err))
 	}
 
 	if failedCount > 0 {
@@ -622,6 +711,13 @@ cleaner:
     - "*.txt"
   exclude_patterns: []
   interval_hours: 24
+
+reporting:
+  consecutive_fail_n: 3
+  top_slow_n: 10
+  weekly_enabled: true
+  monthly_enabled: true
+  daily_summary: true
 `
 
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {

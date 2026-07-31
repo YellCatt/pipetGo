@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"pipetGo/internal/reporting"
+	"pipetGo/internal/storage"
 	"pipetGo/internal/testcase"
 	"pipetGo/internal/timeutil"
 )
@@ -306,4 +308,230 @@ func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimat
 
 	log.Println("发送测试开始通知邮件...")
 	return SendEmail(subject, body.String())
+}
+
+// SendHTMLEmail 发送HTML格式邮件
+func SendHTMLEmail(subject, htmlBody string) error {
+	subject = formatSubject(subject)
+
+	toEmails := strings.Join(Config.ToEmail, ", ")
+	msg := []byte("From: " + Config.FromEmail + "\r\n" +
+		"To: " + toEmails + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		"Content-Type: text/html; charset=UTF-8\r\n" +
+		"\r\n" +
+		htmlBody + "\r\n")
+
+	addr := fmt.Sprintf("%s:%d", Config.SMTPServer, Config.SMTPPort)
+	auth := smtp.PlainAuth("", Config.FromEmail, Config.AuthCode, Config.SMTPServer)
+
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         Config.SMTPServer,
+	}
+
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if err != nil {
+		log.Printf("TLS 连接失败: %v\n", err)
+		return err
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, Config.SMTPServer)
+	if err != nil {
+		log.Printf("创建 SMTP 客户端失败: %v\n", err)
+		return err
+	}
+	defer client.Close()
+
+	if err := client.Auth(auth); err != nil {
+		log.Printf("SMTP 认证失败: %v\n", err)
+		return err
+	}
+
+	if err := client.Mail(Config.FromEmail); err != nil {
+		log.Printf("设置发件人失败: %v\n", err)
+		return err
+	}
+
+	for _, to := range Config.ToEmail {
+		if err := client.Rcpt(to); err != nil {
+			log.Printf("设置收件人 %s 失败: %v\n", to, err)
+			return err
+		}
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		log.Printf("获取数据写入器失败: %v\n", err)
+		return err
+	}
+
+	_, err = w.Write(msg)
+	if err != nil {
+		log.Printf("写入邮件内容失败: %v\n", err)
+		return err
+	}
+
+	err = w.Close()
+	if err != nil {
+		log.Printf("关闭数据写入器失败: %v\n", err)
+		return err
+	}
+
+	log.Println("HTML 邮件发送成功")
+	return nil
+}
+
+// SendWeeklyReportEmail 发送周报邮件
+func SendWeeklyReportEmail(consecutiveFailN int, topSlowN int) error {
+	if !Config.Enabled {
+		log.Println("邮件发送功能已禁用，跳过周报邮件发送")
+		return nil
+	}
+	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+		log.Println("邮件配置未设置，跳过周报邮件发送")
+		return nil
+	}
+
+	report, err := reporting.GenerateWeekReport(getDeviceName(), consecutiveFailN, topSlowN)
+	if err != nil {
+		log.Printf("生成周报失败: %v\n", err)
+		return err
+	}
+
+	subject := fmt.Sprintf("【测试周报】pipetGo - %s (%s ~ %s)", getDeviceName(), report.StartDate, report.EndDate)
+	htmlBody := report.FormatWeekReportHTML()
+
+	log.Println("发送测试周报邮件...")
+	return SendHTMLEmail(subject, htmlBody)
+}
+
+// SendMonthlyReportEmail 发送月报邮件
+func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
+	if !Config.Enabled {
+		log.Println("邮件发送功能已禁用，跳过月报邮件发送")
+		return nil
+	}
+	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+		log.Println("邮件配置未设置，跳过月报邮件发送")
+		return nil
+	}
+
+	report, err := reporting.GenerateMonthReport(getDeviceName(), consecutiveFailN, topSlowN)
+	if err != nil {
+		log.Printf("生成月报失败: %v\n", err)
+		return err
+	}
+
+	subject := fmt.Sprintf("【测试月报】pipetGo - %s (%s ~ %s)", getDeviceName(), report.StartDate, report.EndDate)
+	htmlBody := report.FormatMonthReportHTML()
+
+	log.Println("发送测试月报邮件...")
+	return SendHTMLEmail(subject, htmlBody)
+}
+
+// SendTestReportEmailWithAlerts 发送测试报告邮件，包含连续失败标红告警
+func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFailN int, topSlowN int) error {
+	if !Config.Enabled {
+		log.Println("邮件发送功能已禁用，跳过邮件发送")
+		return nil
+	}
+	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+		log.Println("邮件配置未设置，跳过邮件发送")
+		return nil
+	}
+
+	alerts, _ := storage.GetConsecutiveFailures(consecutiveFailN)
+	alertIDs := make(map[string]bool)
+	for _, a := range alerts {
+		alertIDs[a.TestCaseID] = true
+	}
+
+	slowCases, _ := storage.GetCaseAverageDurations("desc")
+	if topSlowN > 0 && len(slowCases) > topSlowN {
+		slowCases = slowCases[:topSlowN]
+	}
+
+	subject := fmt.Sprintf("【测试报告】pipetGo - %s - %s", getDeviceName(), timeutil.FormatDateTime(timeutil.Now()))
+
+	var htmlBody strings.Builder
+	htmlBody.WriteString(`<html><body style="font-family: monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px;">`)
+	htmlBody.WriteString(fmt.Sprintf(`<h2 style="color: #00d4ff;">测试报告</h2>`))
+	htmlBody.WriteString(fmt.Sprintf(`<p>执行时间: %s | 设备: <b>%s</b></p>`,
+		timeutil.FormatDateTime(timeutil.Now()), getDeviceName()))
+
+	// 统计
+	chainPassed, chainFailed, chainSkipped, independentPassed, independentFailed, independentSkipped, totalDuration := testcase.SummarizeResultsByType(results)
+	totalPassed := chainPassed + independentPassed
+	totalFailed := chainFailed + independentFailed
+	totalSkipped := chainSkipped + independentSkipped
+
+	passRate := 0.0
+	if totalPassed+totalFailed > 0 {
+		passRate = float64(totalPassed) / float64(totalPassed+totalFailed) * 100
+	}
+
+	htmlBody.WriteString(`<h3>测试统计</h3>`)
+	htmlBody.WriteString(`<table style="border-collapse: collapse; color: #e0e0e0;">`)
+	htmlBody.WriteString(fmt.Sprintf(`<tr><td>总测试数:</td><td>%d</td></tr>`, totalPassed+totalFailed+totalSkipped))
+	htmlBody.WriteString(fmt.Sprintf(`<tr><td>通过数:</td><td style="color: #00ff88;">%d</td></tr>`, totalPassed))
+	htmlBody.WriteString(fmt.Sprintf(`<tr><td>失败数:</td><td style="color: #ff4444;">%d</td></tr>`, totalFailed))
+	htmlBody.WriteString(fmt.Sprintf(`<tr><td>跳过数:</td><td>%d</td></tr>`, totalSkipped))
+	htmlBody.WriteString(fmt.Sprintf(`<tr><td>通过率:</td><td>%.2f%%</td></tr>`, passRate))
+	htmlBody.WriteString(fmt.Sprintf(`<tr><td>总耗时:</td><td>%v</td></tr>`, totalDuration))
+	htmlBody.WriteString(`</table>`)
+
+	// 失败详情（连续失败标红）
+	aggregated := testcase.AggregateResultsByFile(results)
+	hasFailures := false
+	for _, r := range aggregated {
+		if !r.Passed && !r.TestCase.Skip {
+			hasFailures = true
+			break
+		}
+	}
+	if hasFailures {
+		htmlBody.WriteString(`<h3>失败详情</h3>`)
+		htmlBody.WriteString(`<table style="border-collapse: collapse; width: 100%%; color: #e0e0e0;">`)
+		htmlBody.WriteString(`<tr style="background: #1a1a3e;"><th>用例ID</th><th>描述</th><th>状态</th><th>耗时</th><th>错误信息</th></tr>`)
+		for _, r := range aggregated {
+			if !r.Passed && !r.TestCase.Skip {
+				rowStyle := ""
+				if alertIDs[r.TestCase.ID] {
+					rowStyle = ` style="background: #4a0000; color: #ff6666; font-weight: bold;"`
+				}
+				htmlBody.WriteString(fmt.Sprintf(`<tr%s><td>%s</td><td>%s</td><td style="color: #ff4444;">❌ FAIL</td><td>%v</td><td>%s</td></tr>`,
+					rowStyle, r.TestCase.ID, r.TestCase.Desc, r.Duration, r.Error))
+			}
+		}
+		htmlBody.WriteString(`</table>`)
+	}
+
+	// 连续失败告警
+	if len(alerts) > 0 {
+		htmlBody.WriteString(`<h3 style="color: #ff4444;">⚠️ 连续失败告警</h3>`)
+		htmlBody.WriteString(`<p>以下用例连续 ` + fmt.Sprintf("%d", consecutiveFailN) + ` 轮失败，请重点关注:</p>`)
+		htmlBody.WriteString(`<table style="border-collapse: collapse; color: #ff6666;">`)
+		htmlBody.WriteString(`<tr style="background: #3a0000;"><th>用例ID</th><th>描述</th><th>最近执行时间</th></tr>`)
+		for _, a := range alerts {
+			htmlBody.WriteString(fmt.Sprintf(`<tr style="background: #2a0000;"><td>%s</td><td>%s</td><td>%s</td></tr>`,
+				a.TestCaseID, a.TestCaseDesc, a.LastExecuted))
+		}
+		htmlBody.WriteString(`</table>`)
+	}
+
+	// 慢接口排名
+	if len(slowCases) > 0 {
+		htmlBody.WriteString(`<h3>最慢接口 TOP ` + fmt.Sprintf("%d", len(slowCases)) + `</h3>`)
+		htmlBody.WriteString(`<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">`)
+		htmlBody.WriteString(reporting.FormatCaseDurationTable(slowCases))
+		htmlBody.WriteString(`</pre>`)
+	}
+
+	htmlBody.WriteString(`<p style="color: #666;">来自 pipetGo 测试程序</p>`)
+	htmlBody.WriteString(`</body></html>`)
+
+	log.Println("发送HTML测试报告邮件...")
+	return SendHTMLEmail(subject, htmlBody.String())
 }

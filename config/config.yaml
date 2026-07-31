@@ -49,3 +49,10 @@ cleaner:
     - "*.txt"
   exclude_patterns: []
   interval_hours: 24
+
+reporting:
+  consecutive_fail_n: 3     # 连续失败N轮触发告警
+  top_slow_n: 10            # 慢接口排名展示 TOP N
+  weekly_enabled: true      # 是否启用周报
+  monthly_enabled: true     # 是否启用月报
+  daily_summary: true       # 是否记录每日汇总
