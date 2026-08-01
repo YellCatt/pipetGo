@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"pipetGo/internal/logger"
+	"pipetGo/internal/timeutil"
 )
 
 var (
@@ -231,7 +232,7 @@ func RecordExecutionTime(testCaseID, testCaseDesc, fileName, url string, duratio
 		url,
 		strconv.FormatInt(int64(duration/time.Millisecond), 10),
 		strconv.FormatBool(success),
-		time.Now().Format("2006-01-02 15:04:05"),
+		timeutil.Now().Format("2006-01-02 15:04:05"),
 	}
 
 	if err := appendRecord(executionCSVPath(), record); err != nil {
@@ -437,7 +438,7 @@ func CalculateAndStoreAverages() error {
 	}
 	sort.Strings(keys)
 
-	now := time.Now().Format("2006-01-02 15:04:05")
+	now := timeutil.Now().Format("2006-01-02 15:04:05")
 	var avgRecords [][]string
 	for _, k := range keys {
 		g := groups[k]

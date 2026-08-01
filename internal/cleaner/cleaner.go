@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"pipetGo/internal/logger"
+	"pipetGo/internal/timeutil"
 )
 
 // Config 清理配置（与 config.go 中的 CleanupConfig 保持一致）
@@ -121,7 +122,7 @@ func (c *Cleaner) setDefaults() {
 // cleanup 执行实际的清理操作
 func (c *Cleaner) cleanup() error {
 	logger.Info("Starting cleanup task")
-	threshold := time.Now().Add(-time.Duration(c.config.RetentionDays) * 24 * time.Hour)
+	threshold := timeutil.Now().Add(-time.Duration(c.config.RetentionDays) * 24 * time.Hour)
 
 	totalDeleted := 0
 

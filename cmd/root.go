@@ -645,7 +645,7 @@ func executeTestRound(testCases []psv.TestCase, reportTimestamp string, round, t
 	chainFiles := testcase.GetChainFiles(testCases)
 
 	// 记录轮次开始时间，用于计算总耗时
-	roundStartTime := time.Now()
+	roundStartTime := timeutil.Now()
 
 	for i, tc := range testCases {
 		result := testcase.ExecuteTestCase(tc)

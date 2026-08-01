@@ -90,7 +90,7 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 		time.Sleep(interval)
 
 		for {
-			cycleStart := time.Now()
+			cycleStart := timeutil.Now()
 			logger.Info("Running scheduled test cycle...")
 			runner()
 			elapsed := time.Since(cycleStart)
