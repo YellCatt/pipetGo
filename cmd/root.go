@@ -240,6 +240,17 @@ func maskString(s string) string {
 // runTestCycle 执行一轮完整的测试流程（不阻塞，用于定时调度）
 // paths: 用户指定的测试用例路径列表
 func runTestCycle(paths []string) {
+	// 启动时打印横幅到 stdout，确保手动执行时能看到输出
+	fmt.Println()
+	fmt.Println("╔════════════════════════════════════════════════════════╗")
+	fmt.Println("║           pipetGo API 测试工具                          ║")
+	fmt.Println("╠════════════════════════════════════════════════════════╣")
+	fmt.Printf("║  启动时间: %-43s ║\n", timeutil.FormatDateTime(timeutil.Now()))
+	fmt.Printf("║  测试设备: %-43s ║\n", config.AppConfig.Test.DeviceName)
+	fmt.Printf("║  日志文件: %-43s ║\n", config.AppConfig.Log.Output)
+	fmt.Println("╚════════════════════════════════════════════════════════╝")
+	fmt.Println()
+
 	// 初始化 HTTP 客户端
 	httpclient.InitClient()
 

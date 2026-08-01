@@ -297,7 +297,7 @@ func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimat
 			totalDuration += time.Duration((rounds-1)*intervalMs) * time.Millisecond
 		}
 		estimatedEndTime := now.Add(totalDuration)
-		body.WriteString(fmt.Sprintf("\n预估执行时间: %v\n", totalDuration))
+		body.WriteString(fmt.Sprintf("\n预估执行时间: %v\n", totalDuration.Round(time.Millisecond)))
 		body.WriteString(fmt.Sprintf("预测结束时间: %s\n", timeutil.FormatDateTime(estimatedEndTime)))
 	} else {
 		body.WriteString(fmt.Sprintf("\n预估执行时间: 无历史数据\n"))
