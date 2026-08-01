@@ -17,6 +17,7 @@ import (
 // log 是全局日志实例
 
 var log *zap.Logger
+var logLevel zap.AtomicLevel
 
 // LogConfig 表示日志配置
 type LogConfig struct {
@@ -39,7 +40,8 @@ func InitLogger(cfg LogConfig) {
 	}
 
 	// 设置日志级别
-	zapConfig.Level = zap.NewAtomicLevelAt(getLogLevel(cfg.Level))
+	logLevel = zap.NewAtomicLevelAt(getLogLevel(cfg.Level))
+	zapConfig.Level = logLevel
 	zapConfig.Encoding = cfg.Encoding
 
 	// 设置输出路径
@@ -118,6 +120,12 @@ func getLogLevel(level string) zapcore.Level {
 	default:
 		return zapcore.InfoLevel
 	}
+}
+
+// UpdateLevel 动态更新日志级别（用于配置热加载）
+func UpdateLevel(level string) {
+	logLevel.SetLevel(getLogLevel(level))
+	Info("日志级别已动态更新", zap.String("level", level))
 }
 
 // Debug 记录调试级别日志

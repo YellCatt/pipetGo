@@ -61,7 +61,8 @@ func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		logger.Error("命令执行失败", zap.Error(err))
 		errorMsg := fmt.Sprintf("命令执行失败: %v", err)
-		if email.Config.Enabled && email.Config.FromEmail != "" && len(email.Config.ToEmail) > 0 {
+		emailCfg := email.GetConfig()
+		if emailCfg.Enabled && emailCfg.FromEmail != "" && len(emailCfg.ToEmail) > 0 {
 			if sendErr := email.SendErrorReportEmail(errorMsg); sendErr != nil {
 				logger.Warn("发送错误报告邮件失败", zap.Error(sendErr))
 			}
@@ -99,23 +100,24 @@ var reportCmd = &cobra.Command{
 
 func initStorage() {
 	httpclient.InitClient()
-	if err := storage.InitDB(config.AppConfig.Test.DataDir); err != nil {
+	if err := storage.InitDB(config.GetConfig().Test.DataDir); err != nil {
 		logger.Warn("CSV 存储初始化失败", zap.Error(err))
 	}
 }
 
 func runReport() {
-	cfg := config.AppConfig.Reporting
-	consecutiveFailN := cfg.ConsecutiveFailN
+	cfg := config.GetConfig()
+	reportingCfg := cfg.Reporting
+	consecutiveFailN := reportingCfg.ConsecutiveFailN
 	if consecutiveFailN <= 0 {
 		consecutiveFailN = 3
 	}
-	topSlowN := cfg.TopSlowN
+	topSlowN := reportingCfg.TopSlowN
 	if topSlowN <= 0 {
 		topSlowN = 10
 	}
 
-	deviceName := config.AppConfig.Test.DeviceName
+	deviceName := cfg.Test.DeviceName
 	if deviceName == "" {
 		hostname, _ := os.Hostname()
 		deviceName = hostname
@@ -130,12 +132,13 @@ func runSendReports() {
 	initConfig()
 	initStorage()
 
-	cfg := config.AppConfig.Reporting
-	consecutiveFailN := cfg.ConsecutiveFailN
+	cfg := config.GetConfig()
+	reportingCfg := cfg.Reporting
+	consecutiveFailN := reportingCfg.ConsecutiveFailN
 	if consecutiveFailN <= 0 {
 		consecutiveFailN = 3
 	}
-	topSlowN := cfg.TopSlowN
+	topSlowN := reportingCfg.TopSlowN
 	if topSlowN <= 0 {
 		topSlowN = 10
 	}
@@ -220,6 +223,37 @@ func initConfig() {
 			runTestCycle(nil)
 		},
 	)
+
+	// 注册配置变更回调（热加载时更新各组件）
+	config.RegisterOnChange(func(newCfg config.Config) {
+		// 更新日志级别
+		logger.UpdateLevel(newCfg.Log.Level)
+
+		// 更新邮件配置
+		email.UpdateConfig(email.EmailConfig{
+			Enabled:    newCfg.Email.Enabled,
+			FromEmail:  newCfg.Email.From,
+			ToEmail:    newCfg.Email.To,
+			AuthCode:   newCfg.Email.AuthCode,
+			SMTPServer: newCfg.Email.SMTPServer,
+			SMTPPort:   newCfg.Email.SMTPPort,
+			DeviceName: newCfg.Test.DeviceName,
+		})
+
+		// 更新内置变量
+		vars.Set("base_url", newCfg.Target.BaseURL)
+
+		// 更新用户自定义变量
+		if len(newCfg.Vars) > 0 {
+			vars.InitFromConfig(newCfg.Vars)
+		}
+
+		logger.Info("配置已热更新",
+			zap.String("log_level", newCfg.Log.Level),
+			zap.Bool("email_enabled", newCfg.Email.Enabled),
+			zap.String("base_url", newCfg.Target.BaseURL),
+		)
+	})
 }
 func maskVars(vars map[string]string) map[string]string {
 	result := make(map[string]string)
@@ -240,14 +274,16 @@ func maskString(s string) string {
 // runTestCycle 执行一轮完整的测试流程（不阻塞，用于定时调度）
 // paths: 用户指定的测试用例路径列表
 func runTestCycle(paths []string) {
+	cfg := config.GetConfig()
+
 	// 启动时打印横幅到 stdout，确保手动执行时能看到输出
 	fmt.Println()
 	fmt.Println("╔════════════════════════════════════════════════════════╗")
 	fmt.Println("║           pipetGo API 测试工具                          ║")
 	fmt.Println("╠════════════════════════════════════════════════════════╣")
 	fmt.Printf("║  启动时间: %-43s ║\n", timeutil.FormatDateTime(timeutil.Now()))
-	fmt.Printf("║  测试设备: %-43s ║\n", config.AppConfig.Test.DeviceName)
-	fmt.Printf("║  日志文件: %-43s ║\n", config.AppConfig.Log.Output)
+	fmt.Printf("║  测试设备: %-43s ║\n", cfg.Test.DeviceName)
+	fmt.Printf("║  日志文件: %-43s ║\n", cfg.Log.Output)
 	fmt.Println("╚════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
@@ -255,8 +291,8 @@ func runTestCycle(paths []string) {
 	httpclient.InitClient()
 
 	// 初始化 CSV 存储
-	logger.Info("准备初始化 CSV 存储", zap.String("DataDir", config.AppConfig.Test.DataDir))
-	if err := storage.InitDB(config.AppConfig.Test.DataDir); err != nil {
+	logger.Info("准备初始化 CSV 存储", zap.String("DataDir", cfg.Test.DataDir))
+	if err := storage.InitDB(cfg.Test.DataDir); err != nil {
 		logger.Warn("CSV 存储初始化失败", zap.Error(err))
 	} else {
 		logger.Info("CSV 存储初始化成功")
@@ -272,7 +308,7 @@ func runTestCycle(paths []string) {
 
 	// 如果未指定路径，使用默认测试用例目录
 	if len(paths) == 0 {
-		paths = config.AppConfig.Test.TestCaseDir
+		paths = cfg.Test.TestCaseDir
 	}
 
 	// 解析 PSV/CSV 测试用例文件
@@ -325,7 +361,7 @@ func runTestCycle(paths []string) {
 	}
 
 	// 确定多轮测试配置（命令行参数优先于配置文件）
-	rounds := config.AppConfig.Test.Rounds
+	rounds := cfg.Test.Rounds
 	if roundsFlag > 0 {
 		rounds = roundsFlag
 	}
@@ -333,7 +369,7 @@ func runTestCycle(paths []string) {
 		rounds = 1
 	}
 
-	intervalMs := config.AppConfig.Test.IntervalMs
+	intervalMs := cfg.Test.IntervalMs
 	if intervalMsFlag > 0 {
 		intervalMs = intervalMsFlag
 	}
@@ -373,12 +409,12 @@ func runTestCycle(paths []string) {
 	}()
 
 	// 执行全局前置条件（所有测试用例执行前运行，仅在第一轮执行）
-	if len(config.AppConfig.Test.GlobalPre) > 0 {
+	if len(cfg.Test.GlobalPre) > 0 {
 		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
 		fmt.Printf("║ 执行全局前置条件                                       ║\n")
 		fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
 
-		for _, preID := range config.AppConfig.Test.GlobalPre {
+		for _, preID := range cfg.Test.GlobalPre {
 			found := false
 			for _, tc := range testCases {
 				if tc.ID == preID {
@@ -444,12 +480,12 @@ func runTestCycle(paths []string) {
 	}
 
 	// 执行全局后置条件（所有测试用例执行后运行）
-	if len(config.AppConfig.Test.GlobalPost) > 0 {
+	if len(cfg.Test.GlobalPost) > 0 {
 		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
 		fmt.Printf("║ 执行全局后置条件                                       ║\n")
 		fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
 
-		for _, postID := range config.AppConfig.Test.GlobalPost {
+		for _, postID := range cfg.Test.GlobalPost {
 			found := false
 			for _, tc := range testCases {
 				if tc.ID == postID {
@@ -488,7 +524,7 @@ func runTestCycle(paths []string) {
 	}
 
 	// 记录每日汇总
-	reportingCfg := config.AppConfig.Reporting
+	reportingCfg := cfg.Reporting
 	if reportingCfg.DailySummary {
 		todayStr := timeutil.Now().Format("2006-01-02")
 		if err := storage.RecordDailySummary(todayStr, passedCount+failedCount+skippedCount, passedCount, failedCount, skippedCount, totalDuration); err != nil {
@@ -499,9 +535,13 @@ func runTestCycle(paths []string) {
 	}
 
 	// 打印慢接口排名
+	topSlowN := reportingCfg.TopSlowN
+	if topSlowN <= 0 {
+		topSlowN = 10
+	}
 	slowCases, _ := storage.GetCaseAverageDurations("desc")
-	if reportingCfg.TopSlowN > 0 && len(slowCases) > reportingCfg.TopSlowN {
-		slowCases = slowCases[:reportingCfg.TopSlowN]
+	if len(slowCases) > topSlowN {
+		slowCases = slowCases[:topSlowN]
 	}
 	if len(slowCases) > 0 {
 		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
@@ -528,7 +568,7 @@ func runTestCycle(paths []string) {
 	}
 
 	// 测试结束后发送HTML邮件报告（含连续失败标红告警）
-	if err := email.SendTestReportEmailWithAlerts(allRoundResults, consecutiveFailN, reportingCfg.TopSlowN); err != nil {
+	if err := email.SendTestReportEmailWithAlerts(allRoundResults, consecutiveFailN, topSlowN); err != nil {
 		logger.Warn("发送 HTML 邮件报告失败", zap.Error(err))
 	}
 }

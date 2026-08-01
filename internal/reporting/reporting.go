@@ -66,7 +66,10 @@ func GenerateWeekReport(deviceName string, consecutiveFailN int, topSlowN int) (
 	if err != nil {
 		slowCases = nil
 	}
-	if topSlowN > 0 && len(slowCases) > topSlowN {
+	if topSlowN <= 0 {
+		topSlowN = 10
+	}
+	if len(slowCases) > topSlowN {
 		slowCases = slowCases[:topSlowN]
 	}
 
@@ -100,7 +103,10 @@ func GenerateMonthReport(deviceName string, consecutiveFailN int, topSlowN int) 
 	if err != nil {
 		slowCases = nil
 	}
-	if topSlowN > 0 && len(slowCases) > topSlowN {
+	if topSlowN <= 0 {
+		topSlowN = 10
+	}
+	if len(slowCases) > topSlowN {
 		slowCases = slowCases[:topSlowN]
 	}
 
@@ -134,7 +140,10 @@ func GenerateYearReport(deviceName string, consecutiveFailN int, topSlowN int) (
 	if err != nil {
 		slowCases = nil
 	}
-	if topSlowN > 0 && len(slowCases) > topSlowN {
+	if topSlowN <= 0 {
+		topSlowN = 10
+	}
+	if len(slowCases) > topSlowN {
 		slowCases = slowCases[:topSlowN]
 	}
 
@@ -451,7 +460,10 @@ func GenerateASCIIReport(deviceName string, consecutiveFailN int, topSlowN int) 
 	if err != nil || len(slowCases) == 0 {
 		sb.WriteString("  [慢接口分析] (暂无足够数据)\n")
 	} else {
-		if topSlowN > 0 && len(slowCases) > topSlowN {
+		if topSlowN <= 0 {
+			topSlowN = 10
+		}
+		if len(slowCases) > topSlowN {
 			slowCases = slowCases[:topSlowN]
 		}
 		sb.WriteString("  [慢接口分析 - 耗时排名]\n")

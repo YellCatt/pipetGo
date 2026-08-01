@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -96,6 +98,31 @@ type ReportingConfig struct {
 // AppConfig 存储全局配置实例
 var AppConfig Config
 
+// configMu 保护 AppConfig 的读写锁
+var configMu sync.RWMutex
+
+// OnChangeFunc 配置变更回调函数类型
+type OnChangeFunc func(newCfg Config)
+
+var (
+	onChangeCallbacks []OnChangeFunc
+	callbackMu        sync.Mutex
+)
+
+// GetConfig 安全地获取当前配置的副本
+func GetConfig() Config {
+	configMu.RLock()
+	defer configMu.RUnlock()
+	return AppConfig
+}
+
+// RegisterOnChange 注册配置变更回调，在配置热加载后调用
+func RegisterOnChange(fn OnChangeFunc) {
+	callbackMu.Lock()
+	defer callbackMu.Unlock()
+	onChangeCallbacks = append(onChangeCallbacks, fn)
+}
+
 // InitConfig 初始化配置
 // 从配置文件读取配置并解析到 AppConfig 中
 func InitConfig() {
@@ -120,50 +147,91 @@ func InitConfig() {
 	}
 
 	// 设置 cleaner 的默认配置
-	setCleanerDefaults()
+	applyCleanerDefaults(&AppConfig)
 
 	// 单独读取 vars 配置，保留原始键名（避免 viper 自动转换小写）
 	AppConfig.Vars = loadRawVars()
+
+	// 启动配置文件监听（热加载）
+	go watchConfig()
 }
 
-// setCleanerDefaults 设置 cleaner 配置的默认值
+// applyCleanerDefaults 设置 cleaner 配置的默认值
 // 如果用户完全没有配置 cleaner，则启用默认配置
 // 如果用户配置了 cleaner 的某些字段，则只为空字段设置默认值
-func setCleanerDefaults() {
+func applyCleanerDefaults(cfg *Config) {
 	// 检查配置文件中是否存在 cleaner 配置
 	hasCleanerConfig := viper.IsSet("cleaner")
 
 	// 如果用户完全没有配置 cleaner，启用默认配置（包括 enabled: true）
 	if !hasCleanerConfig {
-		AppConfig.Cleaner.Enabled = true
-		AppConfig.Cleaner.RetentionDays = 30
-		AppConfig.Cleaner.LogDir = "./logs"
-		AppConfig.Cleaner.ReportDir = "./reports"
-		AppConfig.Cleaner.DataDir = "./sql"
-		AppConfig.Cleaner.IncludePatterns = []string{"*.log", "*.json", "*.csv", "*.txt"}
-		AppConfig.Cleaner.IntervalHours = 24
+		cfg.Cleaner.Enabled = true
+		cfg.Cleaner.RetentionDays = 30
+		cfg.Cleaner.LogDir = "./logs"
+		cfg.Cleaner.ReportDir = "./reports"
+		cfg.Cleaner.DataDir = "./sql"
+		cfg.Cleaner.IncludePatterns = []string{"*.log", "*.json", "*.csv", "*.txt"}
+		cfg.Cleaner.IntervalHours = 24
 		return
 	}
 
 	// 如果用户配置了 cleaner，但某些字段为空，则只为空字段设置默认值
-	if AppConfig.Cleaner.RetentionDays <= 0 {
-		AppConfig.Cleaner.RetentionDays = 30
+	if cfg.Cleaner.RetentionDays <= 0 {
+		cfg.Cleaner.RetentionDays = 30
 	}
-	if AppConfig.Cleaner.LogDir == "" {
-		AppConfig.Cleaner.LogDir = "./logs"
+	if cfg.Cleaner.LogDir == "" {
+		cfg.Cleaner.LogDir = "./logs"
 	}
-	if AppConfig.Cleaner.ReportDir == "" {
-		AppConfig.Cleaner.ReportDir = "./reports"
+	if cfg.Cleaner.ReportDir == "" {
+		cfg.Cleaner.ReportDir = "./reports"
 	}
-	if AppConfig.Cleaner.DataDir == "" {
-		AppConfig.Cleaner.DataDir = "./sql"
+	if cfg.Cleaner.DataDir == "" {
+		cfg.Cleaner.DataDir = "./sql"
 	}
-	if len(AppConfig.Cleaner.IncludePatterns) == 0 {
-		AppConfig.Cleaner.IncludePatterns = []string{"*.log", "*.json", "*.csv", "*.txt"}
+	if len(cfg.Cleaner.IncludePatterns) == 0 {
+		cfg.Cleaner.IncludePatterns = []string{"*.log", "*.json", "*.csv", "*.txt"}
 	}
-	if AppConfig.Cleaner.IntervalHours <= 0 {
-		AppConfig.Cleaner.IntervalHours = 24
+	if cfg.Cleaner.IntervalHours <= 0 {
+		cfg.Cleaner.IntervalHours = 24
 	}
+}
+
+// watchConfig 监听配置文件变化并热加载
+func watchConfig() {
+	viper.WatchConfig()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		log.Printf("[config] 检测到配置文件变化: %s", e.Name)
+
+		// 重新解析配置到临时结构体
+		var newCfg Config
+		if err := viper.Unmarshal(&newCfg); err != nil {
+			log.Printf("[config] 解析新配置失败，保持旧配置: %v", err)
+			return
+		}
+
+		// 设置 cleaner 默认值
+		applyCleanerDefaults(&newCfg)
+
+		// 单独读取 vars 配置，保留原始键名
+		newCfg.Vars = loadRawVars()
+
+		// 原子更新全局配置
+		configMu.Lock()
+		AppConfig = newCfg
+		configMu.Unlock()
+
+		log.Printf("[config] 配置热加载成功")
+
+		// 通知所有注册的回调
+		callbackMu.Lock()
+		callbacks := make([]OnChangeFunc, len(onChangeCallbacks))
+		copy(callbacks, onChangeCallbacks)
+		callbackMu.Unlock()
+
+		for _, fn := range callbacks {
+			fn(newCfg)
+		}
+	})
 }
 
 // loadRawVars 从配置文件读取原始 vars，保留键名大小写。

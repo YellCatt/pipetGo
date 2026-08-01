@@ -8,6 +8,7 @@ import (
 	"net/smtp"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"pipetGo/internal/reporting"
@@ -27,15 +28,31 @@ type EmailConfig struct {
 }
 
 var Config EmailConfig
+var configMu sync.RWMutex
 
 func InitEmail(cfg EmailConfig) {
+	configMu.Lock()
 	Config = cfg
+	configMu.Unlock()
+}
+
+func GetConfig() EmailConfig {
+	configMu.RLock()
+	defer configMu.RUnlock()
+	return Config
+}
+
+func UpdateConfig(cfg EmailConfig) {
+	configMu.Lock()
+	Config = cfg
+	configMu.Unlock()
 }
 
 // getDeviceName 获取设备名称，优先使用配置值，未配置时自动获取主机名
 func getDeviceName() string {
-	if Config.DeviceName != "" {
-		return Config.DeviceName
+	cfg := GetConfig()
+	if cfg.DeviceName != "" {
+		return cfg.DeviceName
 	}
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -53,26 +70,28 @@ func formatBody(body string) string {
 }
 
 func SendEmail(subject, body string) error {
+	cfg := GetConfig()
+
 	subject = formatSubject(subject)
 	body = formatBody(body)
 
-	toEmails := strings.Join(Config.ToEmail, ", ")
-	msg := []byte("From: " + Config.FromEmail + "\r\n" +
+	toEmails := strings.Join(cfg.ToEmail, ", ")
+	msg := []byte("From: " + cfg.FromEmail + "\r\n" +
 		"To: " + toEmails + "\r\n" +
 		"Subject: " + subject + "\r\n" +
 		"Content-Type: text/plain; charset=UTF-8\r\n" +
 		"\r\n" +
 		body + "\r\n")
 
-	addr := fmt.Sprintf("%s:%d", Config.SMTPServer, Config.SMTPPort)
-	auth := smtp.PlainAuth("", Config.FromEmail, Config.AuthCode, Config.SMTPServer)
+	addr := fmt.Sprintf("%s:%d", cfg.SMTPServer, cfg.SMTPPort)
+	auth := smtp.PlainAuth("", cfg.FromEmail, cfg.AuthCode, cfg.SMTPServer)
 
 	log.Printf("连接 SMTP 服务器: %s\n", addr)
 
 	// 使用 TLS 连接
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
-		ServerName:         Config.SMTPServer,
+		ServerName:         cfg.SMTPServer,
 	}
 
 	conn, err := tls.Dial("tcp", addr, tlsConfig)
@@ -82,7 +101,7 @@ func SendEmail(subject, body string) error {
 	}
 	defer conn.Close()
 
-	client, err := smtp.NewClient(conn, Config.SMTPServer)
+	client, err := smtp.NewClient(conn, cfg.SMTPServer)
 	if err != nil {
 		log.Printf("创建 SMTP 客户端失败: %v\n", err)
 		return err
@@ -96,13 +115,13 @@ func SendEmail(subject, body string) error {
 	}
 
 	// 设置发件人
-	if err := client.Mail(Config.FromEmail); err != nil {
+	if err := client.Mail(cfg.FromEmail); err != nil {
 		log.Printf("设置发件人失败: %v\n", err)
 		return err
 	}
 
 	// 设置多个收件人
-	for _, to := range Config.ToEmail {
+	for _, to := range cfg.ToEmail {
 		if err := client.Rcpt(to); err != nil {
 			log.Printf("设置收件人 %s 失败: %v\n", to, err)
 			return err
@@ -215,11 +234,12 @@ func truncateString(s string, maxLen int) string {
 }
 
 func SendTestReportEmail(results []testcase.TestResult) error {
-	if !Config.Enabled {
+	cfg := GetConfig()
+	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过邮件发送")
 		return nil
 	}
@@ -235,11 +255,12 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 
 // SendErrorReportEmail 发送异常退出报告邮件
 func SendErrorReportEmail(errorMessage string) error {
-	if !Config.Enabled {
+	cfg := GetConfig()
+	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过邮件发送")
 		return nil
 	}
@@ -261,11 +282,12 @@ func SendErrorReportEmail(errorMessage string) error {
 
 // SendTestStartEmail 发送测试开始通知邮件
 func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimatedDuration time.Duration, rounds int, intervalMs int) error {
-	if !Config.Enabled {
+	cfg := GetConfig()
+	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过邮件发送")
 		return nil
 	}
@@ -312,11 +334,12 @@ func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimat
 
 // SendWeeklyReportEmail 发送周报邮件
 func SendWeeklyReportEmail(consecutiveFailN int, topSlowN int) error {
-	if !Config.Enabled {
+	cfg := GetConfig()
+	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过周报邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过周报邮件发送")
 		return nil
 	}
@@ -336,11 +359,12 @@ func SendWeeklyReportEmail(consecutiveFailN int, topSlowN int) error {
 
 // SendMonthlyReportEmail 发送月报邮件
 func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
-	if !Config.Enabled {
+	cfg := GetConfig()
+	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过月报邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过月报邮件发送")
 		return nil
 	}
@@ -360,11 +384,12 @@ func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
 
 // SendYearlyReportEmail 发送年报邮件
 func SendYearlyReportEmail(consecutiveFailN int, topSlowN int) error {
-	if !Config.Enabled {
+	cfg := GetConfig()
+	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过年报邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过年报邮件发送")
 		return nil
 	}
@@ -384,11 +409,12 @@ func SendYearlyReportEmail(consecutiveFailN int, topSlowN int) error {
 
 // SendTestReportEmailWithAlerts 发送测试报告邮件，包含连续失败标红告警
 func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFailN int, topSlowN int) error {
-	if !Config.Enabled {
+	cfg := GetConfig()
+	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过邮件发送")
 		return nil
 	}
-	if Config.FromEmail == "" || len(Config.ToEmail) == 0 || Config.AuthCode == "" {
+	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
 		log.Println("邮件配置未设置，跳过邮件发送")
 		return nil
 	}
@@ -400,7 +426,10 @@ func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFai
 	}
 
 	slowCases, _ := storage.GetCaseAverageDurations("desc")
-	if topSlowN > 0 && len(slowCases) > topSlowN {
+	if topSlowN <= 0 {
+		topSlowN = 10
+	}
+	if len(slowCases) > topSlowN {
 		slowCases = slowCases[:topSlowN]
 	}
 
