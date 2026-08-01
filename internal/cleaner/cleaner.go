@@ -46,7 +46,7 @@ func NewCleaner(config Config) *Cleaner {
 // Start 启动定时清理任务
 func (c *Cleaner) Start() error {
 	if !c.config.Enabled {
-		logger.Info("Cleaner is disabled, skipping start")
+		logger.Info("清理器已禁用，跳过启动")
 		return nil
 	}
 
@@ -59,7 +59,7 @@ func (c *Cleaner) Start() error {
 
 	c.running = true
 	interval := time.Duration(c.config.IntervalHours) * time.Hour
-	logger.Info("Starting cleaner with config",
+	logger.Info("启动清理器",
 		zap.Int("retention_days", c.config.RetentionDays),
 		zap.String("log_dir", c.config.LogDir),
 		zap.String("report_dir", c.config.ReportDir),
@@ -79,7 +79,7 @@ func (c *Cleaner) Start() error {
 			case <-ticker.C:
 				c.cleanup()
 			case <-c.stopChan:
-				logger.Info("Cleaner stopped")
+				logger.Info("清理器已停止")
 				return
 			}
 		}
@@ -121,7 +121,7 @@ func (c *Cleaner) setDefaults() {
 
 // cleanup 执行实际的清理操作
 func (c *Cleaner) cleanup() error {
-	logger.Info("Starting cleanup task")
+	logger.Info("开始执行清理任务")
 	threshold := timeutil.Now().Add(-time.Duration(c.config.RetentionDays) * 24 * time.Hour)
 
 	totalDeleted := 0
@@ -130,7 +130,7 @@ func (c *Cleaner) cleanup() error {
 	if c.config.LogDir != "" {
 		count, err := c.cleanupDirectory(c.config.LogDir, threshold)
 		if err != nil {
-			logger.Error("Failed to cleanup log directory", zap.String("dir", c.config.LogDir), zap.Error(err))
+			logger.Error("清理日志目录失败", zap.String("dir", c.config.LogDir), zap.Error(err))
 		} else {
 			totalDeleted += count
 		}
@@ -140,7 +140,7 @@ func (c *Cleaner) cleanup() error {
 	if c.config.ReportDir != "" {
 		count, err := c.cleanupDirectory(c.config.ReportDir, threshold)
 		if err != nil {
-			logger.Error("Failed to cleanup report directory", zap.String("dir", c.config.ReportDir), zap.Error(err))
+			logger.Error("清理报告目录失败", zap.String("dir", c.config.ReportDir), zap.Error(err))
 		} else {
 			totalDeleted += count
 		}
@@ -150,20 +150,20 @@ func (c *Cleaner) cleanup() error {
 	if c.config.DataDir != "" {
 		count, err := c.cleanupDirectory(c.config.DataDir, threshold)
 		if err != nil {
-			logger.Error("Failed to cleanup data directory", zap.String("dir", c.config.DataDir), zap.Error(err))
+			logger.Error("清理数据目录失败", zap.String("dir", c.config.DataDir), zap.Error(err))
 		} else {
 			totalDeleted += count
 		}
 	}
 
-	logger.Info("Cleanup task completed", zap.Int("files_deleted", totalDeleted))
+	logger.Info("清理任务完成", zap.Int("files_deleted", totalDeleted))
 	return nil
 }
 
 // cleanupDirectory 清理指定目录中超过阈值时间的文件
 func (c *Cleaner) cleanupDirectory(dir string, threshold time.Time) (int, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		logger.Debug("Directory does not exist, skipping", zap.String("dir", dir))
+		logger.Debug("目录不存在，跳过", zap.String("dir", dir))
 		return 0, nil
 	}
 
@@ -189,11 +189,11 @@ func (c *Cleaner) cleanupDirectory(dir string, threshold time.Time) (int, error)
 		// 检查文件修改时间
 		if info.ModTime().Before(threshold) {
 			if err := os.Remove(path); err != nil {
-				logger.Warn("Failed to delete file", zap.String("path", path), zap.Error(err))
+				logger.Warn("删除文件失败", zap.String("path", path), zap.Error(err))
 				return err
 			}
 			count++
-			logger.Info("Deleted old file", zap.String("path", path), zap.Time("mod_time", info.ModTime()))
+			logger.Info("已删除旧文件", zap.String("path", path), zap.Time("mod_time", info.ModTime()))
 		}
 
 		return nil

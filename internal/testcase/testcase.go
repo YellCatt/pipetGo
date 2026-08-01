@@ -13,10 +13,10 @@ import (
 
 // TestCase 表示一个测试用例
 type TestCase struct {
-	Name       string        // 测试用例名称
-	Run        func() error  // 测试执行函数
-	Skip       bool          // 是否跳过
-	SkipReason string        // 跳过原因
+	Name       string       // 测试用例名称
+	Run        func() error // 测试执行函数
+	Skip       bool         // 是否跳过
+	SkipReason string       // 跳过原因
 }
 
 // testCases 存储所有注册的测试用例
@@ -56,25 +56,25 @@ func RunAll() {
 	// 初始化 HTTP 客户端
 	httpclient.InitClient()
 
-	logger.Info("Starting API tests...")
+	logger.Info("开始执行 API 测试...")
 
 	var results []testResult
 
 	// 串行执行每个测试用例
 	for _, tc := range testCases {
 		if tc.Skip {
-			logger.Info("Skipping test", zap.String("name", tc.Name), zap.String("reason", tc.SkipReason))
+			logger.Info("跳过测试", zap.String("name", tc.Name), zap.String("reason", tc.SkipReason))
 			results = append(results, testResult{name: tc.Name, skipped: true, skipReason: tc.SkipReason})
 			continue
 		}
 
-		logger.Info("Running test", zap.String("name", tc.Name))
+		logger.Info("正在执行测试", zap.String("name", tc.Name))
 		err := tc.Run()
 		if err != nil {
-			logger.Error("Test failed", zap.String("name", tc.Name), zap.Error(err))
+			logger.Error("测试失败", zap.String("name", tc.Name), zap.Error(err))
 			results = append(results, testResult{name: tc.Name, failed: true, err: err})
 		} else {
-			logger.Info("Test passed", zap.String("name", tc.Name))
+			logger.Info("测试通过", zap.String("name", tc.Name))
 			results = append(results, testResult{name: tc.Name, passed: true})
 		}
 	}
@@ -85,12 +85,12 @@ func RunAll() {
 
 // testResult 表示单个测试用例的执行结果
 type testResult struct {
-	name       string  // 测试用例名称
-	passed     bool    // 是否通过
-	failed     bool    // 是否失败
-	skipped    bool    // 是否跳过
-	skipReason string  // 跳过原因
-	err        error   // 失败时的错误信息
+	name       string // 测试用例名称
+	passed     bool   // 是否通过
+	failed     bool   // 是否失败
+	skipped    bool   // 是否跳过
+	skipReason string // 跳过原因
+	err        error  // 失败时的错误信息
 }
 
 // summarizeResults 汇总测试结果并输出日志
@@ -108,15 +108,15 @@ func summarizeResults(results []testResult) {
 		}
 	}
 
-	logger.Info("Test summary",
+	logger.Info("测试汇总",
 		zap.Int("total", passed+failed+skipped),
 		zap.Int("passed", passed),
 		zap.Int("failed", failed),
 		zap.Int("skipped", skipped))
 
 	if failed > 0 {
-		logger.Error("Some tests failed")
+		logger.Error("部分测试失败")
 	} else {
-		logger.Info("All tests passed!")
+		logger.Info("全部测试通过！")
 	}
 }

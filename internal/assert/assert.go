@@ -12,7 +12,6 @@ import (
 	"pipetGo/internal/logger"
 )
 
-
 func BodyRegexMatch(body string, pattern string) (bool, string) {
 	if pattern == "" {
 		return true, ""
@@ -26,7 +25,7 @@ func BodyRegexMatch(body string, pattern string) (bool, string) {
 
 	matched, err := regexp.MatchString(pattern, body)
 	if err != nil {
-		return false, fmt.Sprintf("invalid regex pattern: %s", err.Error())
+		return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 	}
 
 	if negate {
@@ -35,9 +34,9 @@ func BodyRegexMatch(body string, pattern string) (bool, string) {
 
 	if !matched {
 		if negate {
-			return false, fmt.Sprintf("body should NOT contain pattern '%s'", pattern)
+			return false, fmt.Sprintf("响应体不应包含模式 '%s'", pattern)
 		}
-		return false, fmt.Sprintf("body should contain pattern '%s'", pattern)
+		return false, fmt.Sprintf("响应体应包含模式 '%s'", pattern)
 	}
 
 	return true, ""
@@ -67,17 +66,17 @@ func jsonExactMatch(expected, actual gjson.Result) (bool, string) {
 	actualMap := actual.Map()
 
 	if len(expectedMap) != len(actualMap) {
-		return false, fmt.Sprintf("expected %d keys, got %d keys", len(expectedMap), len(actualMap))
+		return false, fmt.Sprintf("期望 %d 个键，实际 %d 个键", len(expectedMap), len(actualMap))
 	}
 
 	for key, expectedVal := range expectedMap {
 		actualVal, exists := actualMap[key]
 		if !exists {
-			return false, fmt.Sprintf("missing key: %s", key)
+			return false, fmt.Sprintf("缺少键: %s", key)
 		}
 
 		if ok, err := compareValues(expectedVal, actualVal); !ok {
-			return false, fmt.Sprintf("key '%s': %s", key, err)
+			return false, fmt.Sprintf("键 '%s': %s", key, err)
 		}
 	}
 
@@ -97,17 +96,17 @@ func jsonSubsetMatch(expected, actual gjson.Result) (bool, string) {
 
 		if expectedVal.Str == "{{not_exists}}" {
 			if exists {
-				return false, fmt.Sprintf("key '%s' should NOT exist", key)
+				return false, fmt.Sprintf("键 '%s' 不应存在", key)
 			}
 			continue
 		}
 
 		if !exists {
-			return false, fmt.Sprintf("missing key: %s", key)
+			return false, fmt.Sprintf("缺少键: %s", key)
 		}
 
 		if ok, err := compareValues(expectedVal, actualVal); !ok {
-			return false, fmt.Sprintf("key '%s': %s", key, err)
+			return false, fmt.Sprintf("键 '%s': %s", key, err)
 		}
 	}
 
@@ -200,11 +199,11 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 
 	// 常规类型和值比较
 	if expected.Type != actual.Type {
-		return false, fmt.Sprintf("type mismatch: expected %s, got %s", expected.Type, actual.Type)
+		return false, fmt.Sprintf("类型不匹配: 期望 %s，实际 %s", expected.Type, actual.Type)
 	}
 
 	if expectedStr != actual.Str {
-		return false, fmt.Sprintf("value mismatch: expected '%s', got '%s'", expectedStr, actual.Str)
+		return false, fmt.Sprintf("值不匹配: 期望 '%s'，实际 '%s'", expectedStr, actual.Str)
 	}
 
 	return true, ""
@@ -216,7 +215,7 @@ func StreamAssert(aggregatedContent string, chunkCount int, asserts []StreamAsse
 			return true, ""
 		}
 	}
-	return false, "no stream assertion matched"
+	return false, "无可匹配的流式断言"
 }
 
 type StreamAssertConfig struct {
@@ -228,7 +227,7 @@ type StreamAssertConfig struct {
 
 func checkStreamAssert(aggregatedContent string, chunkCount int, sa StreamAssertConfig) (bool, string) {
 	if chunkCount < sa.MinChunks {
-		return false, fmt.Sprintf("need at least %d chunks, got %d", sa.MinChunks, chunkCount)
+		return false, fmt.Sprintf("需要至少 %d 个数据块，实际 %d 个", sa.MinChunks, chunkCount)
 	}
 
 	switch sa.Kind {
@@ -236,7 +235,7 @@ func checkStreamAssert(aggregatedContent string, chunkCount int, sa StreamAssert
 		if strings.Contains(aggregatedContent, sa.Pattern) {
 			return true, ""
 		}
-		return false, fmt.Sprintf("aggregated content does not contain '%s'", sa.Pattern)
+		return false, fmt.Sprintf("聚合内容不包含 '%s'", sa.Pattern)
 
 	case "regex":
 		matched, err := regexp.MatchString(sa.Pattern, aggregatedContent)
@@ -246,17 +245,17 @@ func checkStreamAssert(aggregatedContent string, chunkCount int, sa StreamAssert
 		if matched {
 			return true, ""
 		}
-		return false, fmt.Sprintf("aggregated content does not match regex '%s'", sa.Pattern)
+		return false, fmt.Sprintf("聚合内容不匹配正则 '%s'", sa.Pattern)
 
 	case "json_path":
 		result := gjson.Get(aggregatedContent, sa.Pattern)
 		if result.Exists() {
 			return true, ""
 		}
-		return false, fmt.Sprintf("JSON path '%s' not found in aggregated content", sa.Pattern)
+		return false, fmt.Sprintf("聚合内容中未找到 JSON 路径 '%s'", sa.Pattern)
 
 	default:
-		return false, fmt.Sprintf("unknown stream assert kind: %s", sa.Kind)
+		return false, fmt.Sprintf("未知的流式断言类型: %s", sa.Kind)
 	}
 }
 
@@ -351,7 +350,7 @@ func fixRegexEscapes(pattern string) string {
 // 如果模式以重复操作符开头，自动添加 . 作为前缀
 func validateRegexPattern(pattern string) (string, error) {
 	if pattern == "" {
-		return "", fmt.Errorf("pattern is empty")
+		return "", fmt.Errorf("模式为空")
 	}
 
 	// 检查模式是否以重复操作符开头

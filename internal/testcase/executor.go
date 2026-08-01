@@ -148,10 +148,10 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 	result.Duration = result.EndTime.Sub(startTime)
 
 	if result.Passed {
-		logger.Info("Test passed", zap.String("id", tc.ID), zap.Duration("duration", result.Duration))
+		logger.Info("测试通过", zap.String("id", tc.ID), zap.Duration("duration", result.Duration))
 		fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 	} else {
-		logger.Error("Test failed", zap.String("id", tc.ID), zap.String("error", result.Error))
+		logger.Error("测试失败", zap.String("id", tc.ID), zap.String("error", result.Error))
 		fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 		if result.Error != "" {
 			fmt.Printf("            Error: %s\n", result.Error)
@@ -180,7 +180,7 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 				}
 				delete(globalVars, varName)
 				vars.Delete(varName)
-				logger.Debug("Cleaned up variable", zap.String("name", varName), zap.String("test", tc.ID))
+				logger.Debug("已清理变量", zap.String("name", varName), zap.String("test", tc.ID))
 			}
 		}
 		globalVarsMu.Unlock()
@@ -188,7 +188,7 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 
 	// 执行后延迟（如果设置了 delay_after_ms）
 	if tc.DelayAfterMs > 0 {
-		logger.Info("Waiting after executing test", zap.String("id", tc.ID), zap.Int("delay_after_ms", tc.DelayAfterMs))
+		logger.Info("测试后等待", zap.String("id", tc.ID), zap.Int("delay_after_ms", tc.DelayAfterMs))
 		time.Sleep(time.Duration(tc.DelayAfterMs) * time.Millisecond)
 	}
 
@@ -206,11 +206,11 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		StartTime: startTime,
 	}
 
-	logger.Info("Running test", zap.String("id", tc.ID), zap.String("desc", tc.Desc))
+	logger.Info("正在执行测试", zap.String("id", tc.ID), zap.String("desc", tc.Desc))
 
 	// 如果标记为跳过，直接返回通过
 	if tc.Skip {
-		logger.Info("Skipping test", zap.String("id", tc.ID))
+		logger.Info("跳过测试", zap.String("id", tc.ID))
 		result.Passed = true
 		result.EndTime = timeutil.Now()
 		result.Duration = result.EndTime.Sub(startTime)
@@ -345,7 +345,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	case http.MethodHead:
 		resp, err = req.Head(processedURL)
 	default:
-		err = fmt.Errorf("unsupported HTTP method: %s", tc.Method)
+		err = fmt.Errorf("不支持的 HTTP 方法: %s", tc.Method)
 	}
 
 	// 请求执行失败
@@ -364,7 +364,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 	} else {
 		// 普通模式断言
 		if tc.ExpectedStatus > 0 && resp.StatusCode() != tc.ExpectedStatus {
-			result.Error = fmt.Sprintf("expected status %d, got %d", tc.ExpectedStatus, resp.StatusCode())
+			result.Error = fmt.Sprintf("期望状态码 %d，实际 %d", tc.ExpectedStatus, resp.StatusCode())
 			result.Passed = false
 			return finishTestCase(tc, result, startTime)
 		}
@@ -402,7 +402,7 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			// 记录提取的变量到结果中
 			extractedVarsJSON, _ := json.Marshal(extractedVars)
 			result.ExtractedVars = string(extractedVarsJSON)
-			logger.Info("Extracted variables", zap.String("id", tc.ID), zap.Any("vars", extractedVars))
+			logger.Info("已提取变量", zap.String("id", tc.ID), zap.Any("vars", extractedVars))
 		}
 	}
 
@@ -478,7 +478,7 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 			result.Passed = true
 			result.EndTime = timeutil.Now()
 			result.Duration = result.EndTime.Sub(startTime)
-			logger.Info("Stream assertion passed", zap.String("id", tc.ID))
+			logger.Info("流式断言通过", zap.String("id", tc.ID))
 			fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 			return result
 		} else {
@@ -929,14 +929,14 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 
 	// 创建报告目录
 	if err := os.MkdirAll(reportDir, 0755); err != nil {
-		logger.Error("Failed to create report directory", zap.Error(err))
+		logger.Error("创建报告目录失败", zap.Error(err))
 		return "", ""
 	}
 
 	// 保存全部报告（使用 .csv 扩展名，内容保持管道符分隔）
 	allPath := fmt.Sprintf("%s/report_%s.csv", reportDir, ts)
 	if err := os.WriteFile(allPath, []byte(allReport), 0644); err != nil {
-		logger.Error("Failed to save report", zap.Error(err))
+		logger.Error("保存报告失败", zap.Error(err))
 	}
 
 	// 保存错误报告（如果有失败的测试）
@@ -944,11 +944,11 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 	if errorReport != "" {
 		errorPath = fmt.Sprintf("%s/report_%s_error.csv", reportDir, ts)
 		if err := os.WriteFile(errorPath, []byte(errorReport), 0644); err != nil {
-			logger.Error("Failed to save error report", zap.Error(err))
+			logger.Error("保存错误报告失败", zap.Error(err))
 		}
 	}
 
-	logger.Info("Reports saved", zap.String("all", allPath), zap.String("error", errorPath))
+	logger.Info("报告已保存", zap.String("all", allPath), zap.String("error", errorPath))
 	return allPath, errorPath
 }
 

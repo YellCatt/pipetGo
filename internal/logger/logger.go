@@ -58,12 +58,11 @@ func InitLogger(cfg LogConfig) {
 		enc.AppendString(timeutil.FormatDateTimeMs(t))
 	}
 
-
 	// 构建日志实例
 	var err error
 	log, err = zapConfig.Build()
 	if err != nil {
-		zap.L().Fatal("Failed to initialize logger", zap.Error(err))
+		zap.L().Fatal("初始化日志系统失败", zap.Error(err))
 		os.Exit(1)
 	}
 

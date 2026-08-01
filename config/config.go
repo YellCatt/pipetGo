@@ -111,12 +111,12 @@ func InitConfig() {
 
 	// 读取配置文件
 	if err := viper.ReadInConfig(); err != nil {
-		log.Fatalf("Error reading config file: %v", err)
+		log.Fatalf("读取配置文件失败: %v", err)
 	}
 
 	// 将配置解析到结构体（vars 字段会被 viper 转换为小写，后续会修复）
 	if err := viper.Unmarshal(&AppConfig); err != nil {
-		log.Fatalf("Unable to decode config into struct: %v", err)
+		log.Fatalf("解析配置到结构体失败: %v", err)
 	}
 
 	// 设置 cleaner 的默认配置

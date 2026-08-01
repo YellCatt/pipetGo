@@ -236,7 +236,7 @@ func RecordExecutionTime(testCaseID, testCaseDesc, fileName, url string, duratio
 	}
 
 	if err := appendRecord(executionCSVPath(), record); err != nil {
-		logger.Error("Failed to record execution time", zap.Error(err))
+		logger.Error("记录执行时间失败", zap.Error(err))
 		return err
 	}
 	return nil
@@ -284,13 +284,13 @@ func GetAllAverageDurations() (map[string]time.Duration, error) {
 	defer mu.RUnlock()
 
 	if dataDir == "" {
-		logger.Warn("GetAllAverageDurations: storage not initialized")
+		logger.Warn("获取平均耗时: 存储未初始化")
 		return nil, fmt.Errorf("storage not initialized")
 	}
 
 	_, records, err := readRecords(executionCSVPath())
 	if err != nil {
-		logger.Warn("GetAllAverageDurations: read failed", zap.Error(err))
+		logger.Warn("获取平均耗时: 读取失败", zap.Error(err))
 		return nil, err
 	}
 
@@ -322,9 +322,9 @@ func GetAllAverageDurations() (map[string]time.Duration, error) {
 		}
 	}
 
-	logger.Info("GetAllAverageDurations: found", zap.Int("count", len(averages)), zap.Any("averages", averages))
+	logger.Info("获取平均耗时: 已找到", zap.Int("count", len(averages)), zap.Any("averages", averages))
 	if len(averages) == 0 {
-		logger.Warn("GetAllAverageDurations: no historical data found")
+		logger.Warn("获取平均耗时: 未找到历史数据")
 	}
 	return averages, nil
 }
@@ -455,7 +455,7 @@ func CalculateAndStoreAverages() error {
 			strconv.FormatInt(g.count, 10),
 			now,
 		})
-		logger.Info("Stored average duration",
+		logger.Info("已存储平均耗时",
 			zap.String("test_case_id", g.testCaseID),
 			zap.String("file_name", g.fileName),
 			zap.String("url", g.url),
@@ -464,7 +464,7 @@ func CalculateAndStoreAverages() error {
 	}
 
 	if err := writeRecords(averageCSVPath(), averageHeader, avgRecords); err != nil {
-		logger.Error("Failed to store averages", zap.Error(err))
+		logger.Error("存储平均耗时失败", zap.Error(err))
 		return err
 	}
 

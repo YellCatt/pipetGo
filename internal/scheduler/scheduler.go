@@ -46,7 +46,7 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 	hasReport := cfg.WeeklyEnabled || cfg.MonthlyEnabled || cfg.YearlyEnabled
 
 	if runner == nil {
-		logger.Info("Scheduler not started: no test runner provided")
+		logger.Info("调度器未启动: 未提供测试运行器")
 		return
 	}
 
@@ -57,10 +57,10 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					logger.Error(fmt.Sprintf("Report scheduler panic recovered: %v", r))
+					logger.Error(fmt.Sprintf("报告调度器 panic 已恢复: %v", r))
 				}
 			}()
-			logger.Info(fmt.Sprintf("Report scheduler started, sending reports at %02d:%02d", sendHour, sendMinute))
+			logger.Info(fmt.Sprintf("报告调度器已启动，每天 %02d:%02d 发送报告", sendHour, sendMinute))
 			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
 
@@ -80,27 +80,27 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Error(fmt.Sprintf("Test scheduler panic recovered: %v", r))
+				logger.Error(fmt.Sprintf("测试调度器 panic 已恢复: %v", r))
 			}
 		}()
 		interval := time.Duration(intervalMinutes) * time.Minute
-		logger.Info(fmt.Sprintf("Test scheduler started, running tests every %d minutes", intervalMinutes))
+		logger.Info(fmt.Sprintf("测试调度器已启动，每 %d 分钟执行一次测试", intervalMinutes))
 
 		// 首次等待一个完整间隔（首轮已由 runTests 执行）
 		time.Sleep(interval)
 
 		for {
 			cycleStart := timeutil.Now()
-			logger.Info("Running scheduled test cycle...")
+			logger.Info("执行定时测试周期...")
 			runner()
 			elapsed := time.Since(cycleStart)
 
 			if elapsed < interval {
 				waitTime := interval - elapsed
-				logger.Info(fmt.Sprintf("Test cycle completed in %v, waiting %v until next cycle", elapsed.Round(time.Second), waitTime.Round(time.Second)))
+				logger.Info(fmt.Sprintf("测试周期完成，耗时 %v，等待 %v 后开始下一周期", elapsed.Round(time.Second), waitTime.Round(time.Second)))
 				time.Sleep(waitTime)
 			} else {
-				logger.Info(fmt.Sprintf("Test cycle completed in %v (exceeds interval), starting next cycle immediately", elapsed.Round(time.Second)))
+				logger.Info(fmt.Sprintf("测试周期完成，耗时 %v（超过间隔），立即开始下一周期", elapsed.Round(time.Second)))
 			}
 		}
 	}()
@@ -166,9 +166,9 @@ func checkAndSendReports(dataDir string, cfg Config) {
 	sent := false
 
 	if weekday == 1 && cfg.WeeklyEnabled && state.LastSentWeekly != weekKey {
-		logger.Info("Sending weekly report...")
+		logger.Info("发送周报...")
 		if err := email.SendWeeklyReportEmail(consecutiveFailN, topSlowN); err != nil {
-			logger.Error("Failed to send weekly report: " + err.Error())
+			logger.Error("发送周报失败: " + err.Error())
 		} else {
 			state.LastSentWeekly = weekKey
 			sent = true
@@ -177,9 +177,9 @@ func checkAndSendReports(dataDir string, cfg Config) {
 
 	dayOfMonth := now.Day()
 	if dayOfMonth == 1 && cfg.MonthlyEnabled && state.LastSentMonthly != monthKey {
-		logger.Info("Sending monthly report...")
+		logger.Info("发送月报...")
 		if err := email.SendMonthlyReportEmail(consecutiveFailN, topSlowN); err != nil {
-			logger.Error("Failed to send monthly report: " + err.Error())
+			logger.Error("发送月报失败: " + err.Error())
 		} else {
 			state.LastSentMonthly = monthKey
 			sent = true
@@ -187,9 +187,9 @@ func checkAndSendReports(dataDir string, cfg Config) {
 	}
 
 	if dayOfMonth == 1 && now.Month() == time.January && cfg.YearlyEnabled && state.LastSentYearly != yearKey {
-		logger.Info("Sending yearly report...")
+		logger.Info("发送年报...")
 		if err := email.SendYearlyReportEmail(consecutiveFailN, topSlowN); err != nil {
-			logger.Error("Failed to send yearly report: " + err.Error())
+			logger.Error("发送年报失败: " + err.Error())
 		} else {
 			state.LastSentYearly = yearKey
 			sent = true

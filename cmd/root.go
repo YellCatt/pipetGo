@@ -59,11 +59,11 @@ var (
 // 调用 cobra 的 Execute 方法处理命令行输入
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		logger.Error("Failed to execute command", zap.Error(err))
+		logger.Error("命令执行失败", zap.Error(err))
 		errorMsg := fmt.Sprintf("命令执行失败: %v", err)
 		if email.Config.Enabled && email.Config.FromEmail != "" && len(email.Config.ToEmail) > 0 {
 			if sendErr := email.SendErrorReportEmail(errorMsg); sendErr != nil {
-				logger.Warn("Failed to send error report email", zap.Error(sendErr))
+				logger.Warn("发送错误报告邮件失败", zap.Error(sendErr))
 			}
 		}
 		os.Exit(1)
@@ -100,7 +100,7 @@ var reportCmd = &cobra.Command{
 func initStorage() {
 	httpclient.InitClient()
 	if err := storage.InitDB(config.AppConfig.Test.DataDir); err != nil {
-		logger.Warn("CSV storage init failed", zap.Error(err))
+		logger.Warn("CSV 存储初始化失败", zap.Error(err))
 	}
 }
 
@@ -141,29 +141,29 @@ func runSendReports() {
 	}
 
 	if sendWeeklyFlag {
-		logger.Info("Sending weekly report...")
+		logger.Info("发送周报...")
 		if err := email.SendWeeklyReportEmail(consecutiveFailN, topSlowN); err != nil {
-			logger.Error("Failed to send weekly report", zap.Error(err))
+			logger.Error("发送周报失败", zap.Error(err))
 		} else {
-			logger.Info("Weekly report sent successfully")
+			logger.Info("周报发送成功")
 		}
 	}
 
 	if sendMonthlyFlag {
-		logger.Info("Sending monthly report...")
+		logger.Info("发送月报...")
 		if err := email.SendMonthlyReportEmail(consecutiveFailN, topSlowN); err != nil {
-			logger.Error("Failed to send monthly report", zap.Error(err))
+			logger.Error("发送月报失败", zap.Error(err))
 		} else {
-			logger.Info("Monthly report sent successfully")
+			logger.Info("月报发送成功")
 		}
 	}
 
 	if sendYearlyFlag {
-		logger.Info("Sending yearly report...")
+		logger.Info("发送年报...")
 		if err := email.SendYearlyReportEmail(consecutiveFailN, topSlowN); err != nil {
-			logger.Error("Failed to send yearly report", zap.Error(err))
+			logger.Error("发送年报失败", zap.Error(err))
 		} else {
-			logger.Info("Yearly report sent successfully")
+			logger.Info("年报发送成功")
 		}
 	}
 
@@ -264,9 +264,9 @@ func runTestCycle(paths []string) {
 		// 检查历史记录数
 		count, err := storage.GetTotalExecutionCount()
 		if err != nil {
-			logger.Warn("Failed to get execution count", zap.Error(err))
+			logger.Warn("获取执行计数失败", zap.Error(err))
 		} else {
-			logger.Info("Historical execution records found", zap.Int("count", count))
+			logger.Info("找到历史执行记录", zap.Int("count", count))
 		}
 	}
 
@@ -278,10 +278,10 @@ func runTestCycle(paths []string) {
 	// 解析 PSV/CSV 测试用例文件
 	testCases, err := psv.ParseFiles(paths)
 	if err != nil {
-		logger.Error("Failed to parse PSV files", zap.Error(err))
+		logger.Error("解析 PSV 文件失败", zap.Error(err))
 		errorMsg := fmt.Sprintf("解析测试用例文件失败: %v", err)
 		if err := email.SendErrorReportEmail(errorMsg); err != nil {
-			logger.Warn("Failed to send error report email", zap.Error(err))
+			logger.Warn("发送错误报告邮件失败", zap.Error(err))
 		}
 		os.Exit(1)
 	}
@@ -306,12 +306,12 @@ func runTestCycle(paths []string) {
 
 	// 如果没有测试用例，直接返回
 	if len(testCases) == 0 {
-		logger.Info("No test cases to run")
+		logger.Info("没有需要执行的测试用例")
 		return
 	}
 
 	// 开始执行测试
-	logger.Info("Starting API tests", zap.Int("count", len(testCases)))
+	logger.Info("开始执行 API 测试", zap.Int("count", len(testCases)))
 
 	// 计算预估执行时间
 	estimatedDuration := calculateEstimatedDuration(testCases)
@@ -368,7 +368,7 @@ func runTestCycle(paths []string) {
 	// 发送测试开始通知邮件
 	go func() {
 		if err := email.SendTestStartEmail(executedCount, executedChainCount, executedIndependentCount, estimatedDuration, rounds, intervalMs); err != nil {
-			logger.Warn("Failed to send test start email", zap.Error(err))
+			logger.Warn("发送测试开始通知邮件失败", zap.Error(err))
 		}
 	}()
 
@@ -389,7 +389,7 @@ func runTestCycle(paths []string) {
 						fmt.Printf("\n全局前置条件失败，终止测试执行\n")
 						errorMsg := fmt.Sprintf("全局前置条件 '%s' 执行失败: %s", tc.ID, result.Error)
 						if err := email.SendErrorReportEmail(errorMsg); err != nil {
-							logger.Warn("Failed to send error report email", zap.Error(err))
+							logger.Warn("发送错误报告邮件失败", zap.Error(err))
 						}
 						os.Exit(1)
 					}
@@ -438,9 +438,9 @@ func runTestCycle(paths []string) {
 
 	// 测试结束后计算并存储所有成功测试用例的平均执行时间
 	if err := storage.CalculateAndStoreAverages(); err != nil {
-		logger.Warn("Failed to calculate and store average durations", zap.Error(err))
+		logger.Warn("计算并存储平均耗时失败", zap.Error(err))
 	} else {
-		logger.Info("Successfully calculated and stored average durations")
+		logger.Info("成功计算并存储平均耗时")
 	}
 
 	// 执行全局后置条件（所有测试用例执行后运行）
@@ -492,9 +492,9 @@ func runTestCycle(paths []string) {
 	if reportingCfg.DailySummary {
 		todayStr := timeutil.Now().Format("2006-01-02")
 		if err := storage.RecordDailySummary(todayStr, passedCount+failedCount+skippedCount, passedCount, failedCount, skippedCount, totalDuration); err != nil {
-			logger.Warn("Failed to record daily summary", zap.Error(err))
+			logger.Warn("记录每日汇总失败", zap.Error(err))
 		} else {
-			logger.Info("Daily summary recorded", zap.String("date", todayStr))
+			logger.Info("每日汇总已记录", zap.String("date", todayStr))
 		}
 	}
 
@@ -529,7 +529,7 @@ func runTestCycle(paths []string) {
 
 	// 测试结束后发送HTML邮件报告（含连续失败标红告警）
 	if err := email.SendTestReportEmailWithAlerts(allRoundResults, consecutiveFailN, reportingCfg.TopSlowN); err != nil {
-		logger.Warn("Failed to send HTML email report", zap.Error(err))
+		logger.Warn("发送 HTML 邮件报告失败", zap.Error(err))
 	}
 }
 
@@ -544,7 +544,7 @@ func waitForScheduler() {
 	if !scheduler.IsRunning() {
 		return
 	}
-	logger.Info("Daemon mode: scheduler is running, keeping process alive...")
+	logger.Info("守护进程模式: 调度器正在运行，保持进程存活...")
 	select {}
 }
 
@@ -553,7 +553,7 @@ func calculateEstimatedDuration(testCases []psv.TestCase) time.Duration {
 	// 获取所有 URL 的平均执行时间
 	averages, err := storage.GetAllAverageDurations()
 	if err != nil {
-		logger.Warn("Failed to get average durations", zap.Error(err))
+		logger.Warn("获取平均耗时失败", zap.Error(err))
 		return 0
 	}
 
@@ -716,7 +716,7 @@ func correctAndRecordResults(results []testcase.TestResult, totalDuration time.D
 	// 计算每个成功测试用例需要分摊的开销
 	overheadPerTest := overhead / time.Duration(passedCount)
 
-	logger.Info("Correcting execution times",
+	logger.Info("正在修正执行时间",
 		zap.Duration("total_duration", totalDuration),
 		zap.Duration("actual_sum", actualSum),
 		zap.Duration("overhead", overhead),
@@ -739,7 +739,7 @@ func correctAndRecordResults(results []testcase.TestResult, totalDuration time.D
 				true,
 			)
 
-			logger.Info("Corrected execution time recorded",
+			logger.Info("已记录修正后的执行时间",
 				zap.String("test_case_id", result.TestCase.ID),
 				zap.Duration("original_duration", result.Duration),
 				zap.Duration("corrected_duration", correctedDuration))

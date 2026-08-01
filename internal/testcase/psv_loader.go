@@ -2,6 +2,7 @@ package testcase
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
@@ -33,7 +34,7 @@ func LoadFromPSV(filePath string) error {
 }
 
 func runPSVTestCase(tc *psv.TestCase) error {
-	logger.Info("Running PSV test", zap.String("name", tc.Name), zap.String("endpoint", tc.Endpoint))
+	logger.Info("正在执行 PSV 测试", zap.String("name", tc.Name), zap.String("endpoint", tc.Endpoint))
 
 	req := httpclient.Client.R()
 
@@ -69,7 +70,7 @@ func runPSVTestCase(tc *psv.TestCase) error {
 		return err
 	}
 
-	logger.Debug("Response",
+	logger.Debug("响应",
 		zap.Int("status", resp.StatusCode()),
 		zap.String("body", string(resp.Body())))
 
@@ -81,11 +82,11 @@ func runPSVTestCase(tc *psv.TestCase) error {
 }
 
 func ErrInvalidMethod(method string) error {
-	return &TestError{Message: "invalid HTTP method: " + method}
+	return &TestError{Message: "不支持的 HTTP 方法: " + method}
 }
 
 func ErrUnexpectedStatus(expected, actual int) error {
-	return &TestError{Message: "expected status " + string(rune(expected+'0')) + ", got " + string(rune(actual+'0'))}
+	return &TestError{Message: fmt.Sprintf("期望状态码 %d，实际 %d", expected, actual)}
 }
 
 type TestError struct {
