@@ -32,11 +32,16 @@ var (
 		Long:  `A powerful enterprise-grade API testing tool written in Go.`,
 		Args:  cobra.ArbitraryArgs,
 		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("[DEBUG] rootCmd.Run 被调用, args=%v, sendWeekly=%v, sendMonthly=%v, sendYearly=%v\n",
+				args, sendWeeklyFlag, sendMonthlyFlag, sendYearlyFlag)
 			if sendWeeklyFlag || sendMonthlyFlag || sendYearlyFlag {
+				fmt.Println("[DEBUG] 进入 runSendReports 分支")
 				runSendReports()
 			} else {
+				fmt.Println("[DEBUG] 进入 runTests 分支")
 				runTests(args)
 			}
+			fmt.Println("[DEBUG] rootCmd.Run 执行完毕")
 		},
 	}
 
@@ -176,19 +181,30 @@ func runSendReports() {
 // initConfig 初始化应用配置
 // 依次初始化：必要目录和默认配置、配置、日志、全局变量、邮件配置
 func initConfig() {
-	// 自动创建必要的目录和默认配置文件
-	initDirectories()
+	fmt.Println("[DEBUG] initConfig 开始执行")
 
+	// 自动创建必要的目录和默认配置文件
+	fmt.Println("[DEBUG] 调用 initDirectories()")
+	initDirectories()
+	fmt.Println("[DEBUG] initDirectories() 完成")
+
+	fmt.Println("[DEBUG] 调用 config.InitConfig()")
 	config.InitConfig()
+	fmt.Println("[DEBUG] config.InitConfig() 完成")
+
+	fmt.Printf("[DEBUG] 日志配置: level=%s, encoding=%s, output=%s\n",
+		config.AppConfig.Log.Level, config.AppConfig.Log.Encoding, config.AppConfig.Log.Output)
 
 	logger.InitLogger(logger.LogConfig{
 		Level:    config.AppConfig.Log.Level,
 		Encoding: config.AppConfig.Log.Encoding,
 		Output:   config.AppConfig.Log.Output,
 	})
+	logger.Debug("logger 初始化完成")
 
 	// 初始化内置变量
 	vars.Set("base_url", config.AppConfig.Target.BaseURL)
+	logger.Debug("内置变量 base_url 已设置", zap.String("base_url", config.AppConfig.Target.BaseURL))
 
 	// 加载用户自定义变量（支持任意变量名）
 	if len(config.AppConfig.Vars) > 0 {
@@ -199,6 +215,7 @@ func initConfig() {
 	}
 	logger.Info("当前可用变量", zap.Any("vars", vars.GetAll()))
 
+	logger.Debug("开始初始化邮件配置")
 	email.InitEmail(email.EmailConfig{
 		Enabled:    config.AppConfig.Email.Enabled,
 		FromEmail:  config.AppConfig.Email.From,
@@ -208,7 +225,9 @@ func initConfig() {
 		SMTPPort:   config.AppConfig.Email.SMTPPort,
 		DeviceName: config.AppConfig.Test.DeviceName,
 	})
+	logger.Debug("邮件配置初始化完成", zap.Bool("enabled", config.AppConfig.Email.Enabled))
 
+	logger.Debug("开始启动调度器")
 	scheduler.Start(
 		config.AppConfig.Test.DataDir,
 		scheduler.Config{
@@ -223,6 +242,7 @@ func initConfig() {
 			runTestCycle(nil)
 		},
 	)
+	logger.Debug("调度器启动完成")
 
 	// 注册配置变更回调（热加载时更新各组件）
 	config.RegisterOnChange(func(newCfg config.Config) {
@@ -254,6 +274,8 @@ func initConfig() {
 			zap.String("base_url", newCfg.Target.BaseURL),
 		)
 	})
+
+	fmt.Println("[DEBUG] initConfig 执行完成")
 }
 func maskVars(vars map[string]string) map[string]string {
 	result := make(map[string]string)
@@ -274,7 +296,9 @@ func maskString(s string) string {
 // runTestCycle 执行一轮完整的测试流程（不阻塞，用于定时调度）
 // paths: 用户指定的测试用例路径列表
 func runTestCycle(paths []string) {
+	fmt.Println("[DEBUG] runTestCycle 开始执行")
 	cfg := config.GetConfig()
+	fmt.Printf("[DEBUG] 获取配置完成, test_case_dir=%v, data_dir=%s\n", cfg.Test.TestCaseDir, cfg.Test.DataDir)
 
 	// 启动时打印横幅到 stdout，确保手动执行时能看到输出
 	fmt.Println()
@@ -287,8 +311,10 @@ func runTestCycle(paths []string) {
 	fmt.Println("╚════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
+	fmt.Println("[DEBUG] 初始化 HTTP 客户端")
 	// 初始化 HTTP 客户端
 	httpclient.InitClient()
+	fmt.Println("[DEBUG] HTTP 客户端初始化完成")
 
 	// 初始化 CSV 存储
 	logger.Info("准备初始化 CSV 存储", zap.String("DataDir", cfg.Test.DataDir))
@@ -310,8 +336,10 @@ func runTestCycle(paths []string) {
 	if len(paths) == 0 {
 		paths = cfg.Test.TestCaseDir
 	}
+	fmt.Printf("[DEBUG] 待解析的测试用例路径: %v\n", paths)
 
 	// 解析 PSV/CSV 测试用例文件
+	fmt.Println("[DEBUG] 开始解析 PSV/CSV 测试用例文件")
 	testCases, err := psv.ParseFiles(paths)
 	if err != nil {
 		logger.Error("解析 PSV 文件失败", zap.Error(err))
@@ -321,6 +349,7 @@ func runTestCycle(paths []string) {
 		}
 		os.Exit(1)
 	}
+	fmt.Printf("[DEBUG] PSV 解析完成, 共解析 %d 个测试用例\n", len(testCases))
 
 	// 设置所有测试用例（用于链式测试查找前置条件）
 	testcase.SetAllTestCases(testCases)
@@ -339,9 +368,11 @@ func runTestCycle(paths []string) {
 
 	// 根据标签过滤测试用例
 	testCases = testcase.FilterByTags(testCases, tags)
+	fmt.Printf("[DEBUG] 标签过滤后剩余 %d 个测试用例\n", len(testCases))
 
 	// 如果没有测试用例，直接返回
 	if len(testCases) == 0 {
+		fmt.Println("[DEBUG] 没有需要执行的测试用例，runTestCycle 返回")
 		logger.Info("没有需要执行的测试用例")
 		return
 	}
@@ -575,8 +606,12 @@ func runTestCycle(paths []string) {
 
 // runTests 执行测试主流程，完成后进入 daemon 等待
 func runTests(paths []string) {
+	fmt.Printf("[DEBUG] runTests 被调用, paths=%v\n", paths)
+	logger.Debug("runTests 开始执行", zap.Strings("paths", paths))
 	runTestCycle(paths)
+	fmt.Println("[DEBUG] runTestCycle 执行完成")
 	waitForScheduler()
+	fmt.Println("[DEBUG] waitForScheduler 返回")
 }
 
 // waitForScheduler 如果调度器正在运行，则阻塞保持进程存活（daemon 模式）
@@ -651,6 +686,7 @@ func formatDuration(d time.Duration) string {
 // initDirectories 自动创建必要的目录和默认配置文件
 // 如果目录不存在则创建，已存在则跳过
 func initDirectories() {
+	fmt.Println("[DEBUG] initDirectories 开始执行")
 	// 需要创建的目录列表（使用默认值，因为此时配置还未加载）
 	directories := []string{
 		"./config",    // 配置文件目录
@@ -672,6 +708,7 @@ func initDirectories() {
 
 	// 检查并创建默认配置文件
 	createDefaultConfigFile()
+	fmt.Println("[DEBUG] initDirectories 执行完成")
 }
 
 // executeTestRound 执行单轮测试
