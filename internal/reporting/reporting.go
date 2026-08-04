@@ -26,6 +26,15 @@ type WeekReport struct {
 	DeviceName string
 }
 
+// DayReport 表示日报内容
+type DayReport struct {
+	Date       string
+	DailyStats []storage.DailySummary
+	SlowCases  []storage.CaseAvgDuration
+	AlertCases []storage.ConsecutiveFailureInfo
+	DeviceName string
+}
+
 // MonthReport 表示月报内容
 type MonthReport struct {
 	StartDate  string
@@ -81,6 +90,41 @@ func GenerateWeekReport(deviceName string, consecutiveFailN int, topSlowN int) (
 	return &WeekReport{
 		StartDate:  startDate,
 		EndDate:    endDate,
+		DailyStats: stats,
+		SlowCases:  slowCases,
+		AlertCases: alertCases,
+		DeviceName: deviceName,
+	}, nil
+}
+
+// GenerateDayReport 生成本日报告
+func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*DayReport, error) {
+	now := timeutil.Now()
+	dateStr := now.Format("2006-01-02")
+
+	stats, err := storage.GetDailySummaries(dateStr, dateStr)
+	if err != nil {
+		return nil, err
+	}
+
+	slowCases, err := storage.GetCaseAverageDurations("desc")
+	if err != nil {
+		slowCases = nil
+	}
+	if topSlowN <= 0 {
+		topSlowN = 10
+	}
+	if len(slowCases) > topSlowN {
+		slowCases = slowCases[:topSlowN]
+	}
+
+	alertCases, err := storage.GetConsecutiveFailures(consecutiveFailN)
+	if err != nil {
+		alertCases = nil
+	}
+
+	return &DayReport{
+		Date:       dateStr,
 		DailyStats: stats,
 		SlowCases:  slowCases,
 		AlertCases: alertCases,
@@ -165,6 +209,11 @@ func GenerateYearReport(deviceName string, consecutiveFailN int, topSlowN int) (
 // FormatWeekReport 格式化周报为纯文本
 func (r *WeekReport) FormatWeekReport() string {
 	return formatReportText("周报", "本周", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+}
+
+// FormatDayReport 格式化日报为纯文本
+func (r *DayReport) FormatDayReport() string {
+	return formatReportText("日报", "本日", r.Date, r.Date, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
 }
 
 // FormatMonthReport 格式化月报为纯文本
@@ -374,6 +423,11 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 // FormatWeekReportHTML 格式化周报为HTML（用于邮件）
 func (r *WeekReport) FormatWeekReportHTML() string {
 	return formatReportHTML("周报", "本周", r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+}
+
+// FormatDayReportHTML 格式化日报为HTML（用于邮件）
+func (r *DayReport) FormatDayReportHTML() string {
+	return formatReportHTML("日报", "本日", r.Date, r.Date, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
 }
 
 // FormatMonthReportHTML 格式化月报为HTML（用于邮件）

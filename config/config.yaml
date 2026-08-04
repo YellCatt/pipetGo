@@ -56,4 +56,7 @@ reporting:
   top_slow_n: 10            # 慢接口排名展示 TOP N
   weekly_enabled: true      # 是否启用周报
   monthly_enabled: true     # 是否启用月报
+  yearly_enabled: true      # 是否启用年报
+  daily_enabled: true       # 是否启用日报
   daily_summary: true       # 是否记录每日汇总
+  send_time: "05:00"        # 报告发送时间，格式 HH:MM

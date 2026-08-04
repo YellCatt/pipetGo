@@ -357,6 +357,31 @@ func SendWeeklyReportEmail(consecutiveFailN int, topSlowN int) error {
 	return SendEmail(subject, body)
 }
 
+// SendDailyReportEmail 发送日报邮件
+func SendDailyReportEmail(consecutiveFailN int, topSlowN int) error {
+	cfg := GetConfig()
+	if !cfg.Enabled {
+		log.Println("邮件发送功能已禁用，跳过日报邮件发送")
+		return nil
+	}
+	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
+		log.Println("邮件配置未设置，跳过日报邮件发送")
+		return nil
+	}
+
+	report, err := reporting.GenerateDayReport(getDeviceName(), consecutiveFailN, topSlowN)
+	if err != nil {
+		log.Printf("生成日报失败: %v\n", err)
+		return err
+	}
+
+	subject := fmt.Sprintf("【测试日报】pipetGo - %s (%s)", getDeviceName(), report.Date)
+	body := report.FormatDayReport()
+
+	log.Println("发送测试日报邮件...")
+	return SendEmail(subject, body)
+}
+
 // SendMonthlyReportEmail 发送月报邮件
 func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
 	cfg := GetConfig()

@@ -87,12 +87,14 @@ type CleanupConfig struct {
 
 // ReportingConfig 表示报告和告警相关的配置
 type ReportingConfig struct {
-	ConsecutiveFailN int  `mapstructure:"consecutive_fail_n"` // 连续失败N轮告警阈值
-	TopSlowN         int  `mapstructure:"top_slow_n"`         // 慢接口排名 TOP N
-	WeeklyEnabled    bool `mapstructure:"weekly_enabled"`     // 是否启用周报
-	MonthlyEnabled   bool `mapstructure:"monthly_enabled"`    // 是否启用月报
-	YearlyEnabled    bool `mapstructure:"yearly_enabled"`     // 是否启用年报
-	DailySummary     bool `mapstructure:"daily_summary"`      // 是否启用每日汇总记录
+	ConsecutiveFailN int    `mapstructure:"consecutive_fail_n"` // 连续失败N轮告警阈值
+	TopSlowN         int    `mapstructure:"top_slow_n"`         // 慢接口排名 TOP N
+	WeeklyEnabled    bool   `mapstructure:"weekly_enabled"`     // 是否启用周报
+	MonthlyEnabled   bool   `mapstructure:"monthly_enabled"`    // 是否启用月报
+	YearlyEnabled    bool   `mapstructure:"yearly_enabled"`     // 是否启用年报
+	DailyEnabled     bool   `mapstructure:"daily_enabled"`      // 是否启用日报
+	DailySummary     bool   `mapstructure:"daily_summary"`      // 是否启用每日汇总记录
+	SendTime         string `mapstructure:"send_time"`          // 报告发送时间，格式 "HH:MM"，默认 "05:00"
 }
 
 // AppConfig 存储全局配置实例
@@ -149,6 +151,9 @@ func InitConfig() {
 	// 设置 cleaner 的默认配置
 	applyCleanerDefaults(&AppConfig)
 
+	// 设置 reporting 的默认配置
+	applyReportingDefaults(&AppConfig)
+
 	// 单独读取 vars 配置，保留原始键名（避免 viper 自动转换小写）
 	AppConfig.Vars = loadRawVars()
 
@@ -196,6 +201,30 @@ func applyCleanerDefaults(cfg *Config) {
 	}
 }
 
+// applyReportingDefaults 设置 reporting 配置的默认值
+func applyReportingDefaults(cfg *Config) {
+	// 报告发送时间默认为早上5:00
+	if cfg.Reporting.SendTime == "" {
+		cfg.Reporting.SendTime = "05:00"
+	}
+	// 报告默认全部开启
+	if !viper.IsSet("reporting.weekly_enabled") {
+		cfg.Reporting.WeeklyEnabled = true
+	}
+	if !viper.IsSet("reporting.monthly_enabled") {
+		cfg.Reporting.MonthlyEnabled = true
+	}
+	if !viper.IsSet("reporting.yearly_enabled") {
+		cfg.Reporting.YearlyEnabled = true
+	}
+	if !viper.IsSet("reporting.daily_enabled") {
+		cfg.Reporting.DailyEnabled = true
+	}
+	if !viper.IsSet("reporting.daily_summary") {
+		cfg.Reporting.DailySummary = true
+	}
+}
+
 // watchConfig 监听配置文件变化并热加载
 func watchConfig() {
 	viper.WatchConfig()
@@ -211,6 +240,9 @@ func watchConfig() {
 
 		// 设置 cleaner 默认值
 		applyCleanerDefaults(&newCfg)
+
+		// 设置 reporting 默认值
+		applyReportingDefaults(&newCfg)
 
 		// 单独读取 vars 配置，保留原始键名
 		newCfg.Vars = loadRawVars()

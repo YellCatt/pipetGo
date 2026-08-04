@@ -32,9 +32,9 @@ var (
 		Long:  `A powerful enterprise-grade API testing tool written in Go.`,
 		Args:  cobra.ArbitraryArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("[DEBUG] rootCmd.Run 被调用, args=%v, sendWeekly=%v, sendMonthly=%v, sendYearly=%v\n",
-				args, sendWeeklyFlag, sendMonthlyFlag, sendYearlyFlag)
-			if sendWeeklyFlag || sendMonthlyFlag || sendYearlyFlag {
+			fmt.Printf("[DEBUG] rootCmd.Run 被调用, args=%v, sendWeekly=%v, sendMonthly=%v, sendYearly=%v, sendDaily=%v\n",
+				args, sendWeeklyFlag, sendMonthlyFlag, sendYearlyFlag, sendDailyFlag)
+			if sendWeeklyFlag || sendMonthlyFlag || sendYearlyFlag || sendDailyFlag {
 				fmt.Println("[DEBUG] 进入 runSendReports 分支")
 				runSendReports()
 			} else {
@@ -58,6 +58,7 @@ var (
 	sendWeeklyFlag  bool
 	sendMonthlyFlag bool
 	sendYearlyFlag  bool
+	sendDailyFlag   bool
 )
 
 // Execute 启动命令行应用
@@ -88,6 +89,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&sendWeeklyFlag, "send-weekly", false, "立即发送周报邮件")
 	rootCmd.Flags().BoolVar(&sendMonthlyFlag, "send-monthly", false, "立即发送月报邮件")
 	rootCmd.Flags().BoolVar(&sendYearlyFlag, "send-yearly", false, "立即发送年报邮件")
+	rootCmd.Flags().BoolVar(&sendDailyFlag, "send-daily", false, "立即发送日报邮件")
 
 	rootCmd.AddCommand(reportCmd)
 }
@@ -154,6 +156,15 @@ func runSendReports() {
 			logger.Error("发送周报失败", zap.Error(err))
 		} else {
 			logger.Info("周报发送成功")
+		}
+	}
+
+	if sendDailyFlag {
+		logger.Info("发送日报...")
+		if err := email.SendDailyReportEmail(consecutiveFailN, topSlowN); err != nil {
+			logger.Error("发送日报失败", zap.Error(err))
+		} else {
+			logger.Info("日报发送成功")
 		}
 	}
 
@@ -236,7 +247,9 @@ func initConfig() {
 			WeeklyEnabled:       config.AppConfig.Reporting.WeeklyEnabled,
 			MonthlyEnabled:      config.AppConfig.Reporting.MonthlyEnabled,
 			YearlyEnabled:       config.AppConfig.Reporting.YearlyEnabled,
+			DailyEnabled:        config.AppConfig.Reporting.DailyEnabled,
 			TestIntervalMinutes: config.AppConfig.Test.ScheduleIntervalMinutes,
+			SendTime:            config.AppConfig.Reporting.SendTime,
 		},
 		func() {
 			runTestCycle(nil)
@@ -890,7 +903,9 @@ reporting:
   weekly_enabled: true
   monthly_enabled: true
   yearly_enabled: true
+  daily_enabled: true
   daily_summary: true
+  send_time: "05:00"
 `
 
 	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
