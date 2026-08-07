@@ -44,9 +44,12 @@ func formatBytes(bytes uint64) string {
 
 // StartupHeaderData 启动头部模板数据
 type StartupHeaderData struct {
-	StartTime  string
-	DeviceName string
-	LogFile    string
+	StartTime     string
+	DeviceName    string
+	LogFile       string
+	StartTimeRaw  string
+	DeviceNameRaw string
+	LogFileRaw    string
 }
 
 // StartupStatsData 测试统计模板数据
@@ -274,22 +277,4 @@ func MustRenderText(tmplName string, data any) string {
 		return fmt.Sprintf("模板渲染错误: %v", err)
 	}
 	return result
-}
-
-// tmplNameFromType 根据报告类型返回模板名称
-func tmplNameFromType(reportType string) string {
-	switch reportType {
-	case "日报":
-		return "daily"
-	case "周报":
-		return "weekly"
-	case "月报":
-		return "monthly"
-	case "年报":
-		return "yearly"
-	case "综合报告":
-		return "ascii"
-	default:
-		return "daily"
-	}
 }
