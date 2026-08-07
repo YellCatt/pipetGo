@@ -152,7 +152,13 @@ func runSendReports() {
 
 	if sendWeeklyFlag {
 		logger.Info("发送周报...")
-		if err := email.SendWeeklyReportEmail(consecutiveFailN, topSlowN); err != nil {
+		weekTmpl := reporting.NewReportTemplate("周报", "本周",
+			reportingCfg.WeekTemplate.ShowSummary,
+			reportingCfg.WeekTemplate.ShowGrowth,
+			reportingCfg.WeekTemplate.ShowError,
+			reportingCfg.WeekTemplate.ShowSlow,
+			reportingCfg.WeekTemplate.ShowAlert)
+		if err := email.SendWeeklyReportEmailWithTemplate(consecutiveFailN, topSlowN, weekTmpl); err != nil {
 			logger.Error("发送周报失败", zap.Error(err))
 		} else {
 			logger.Info("周报发送成功")
@@ -161,7 +167,13 @@ func runSendReports() {
 
 	if sendDailyFlag {
 		logger.Info("发送日报...")
-		if err := email.SendDailyReportEmail(consecutiveFailN, topSlowN); err != nil {
+		dayTmpl := reporting.NewReportTemplate("日报", "本日",
+			reportingCfg.DayTemplate.ShowSummary,
+			reportingCfg.DayTemplate.ShowGrowth,
+			reportingCfg.DayTemplate.ShowError,
+			reportingCfg.DayTemplate.ShowSlow,
+			reportingCfg.DayTemplate.ShowAlert)
+		if err := email.SendDailyReportEmailWithTemplate(consecutiveFailN, topSlowN, dayTmpl); err != nil {
 			logger.Error("发送日报失败", zap.Error(err))
 		} else {
 			logger.Info("日报发送成功")
@@ -170,7 +182,13 @@ func runSendReports() {
 
 	if sendMonthlyFlag {
 		logger.Info("发送月报...")
-		if err := email.SendMonthlyReportEmail(consecutiveFailN, topSlowN); err != nil {
+		monthTmpl := reporting.NewReportTemplate("月报", "本月",
+			reportingCfg.MonthTemplate.ShowSummary,
+			reportingCfg.MonthTemplate.ShowGrowth,
+			reportingCfg.MonthTemplate.ShowError,
+			reportingCfg.MonthTemplate.ShowSlow,
+			reportingCfg.MonthTemplate.ShowAlert)
+		if err := email.SendMonthlyReportEmailWithTemplate(consecutiveFailN, topSlowN, monthTmpl); err != nil {
 			logger.Error("发送月报失败", zap.Error(err))
 		} else {
 			logger.Info("月报发送成功")
@@ -179,7 +197,13 @@ func runSendReports() {
 
 	if sendYearlyFlag {
 		logger.Info("发送年报...")
-		if err := email.SendYearlyReportEmail(consecutiveFailN, topSlowN); err != nil {
+		yearTmpl := reporting.NewReportTemplate("年报", "本年",
+			reportingCfg.YearTemplate.ShowSummary,
+			reportingCfg.YearTemplate.ShowGrowth,
+			reportingCfg.YearTemplate.ShowError,
+			reportingCfg.YearTemplate.ShowSlow,
+			reportingCfg.YearTemplate.ShowAlert)
+		if err := email.SendYearlyReportEmailWithTemplate(consecutiveFailN, topSlowN, yearTmpl); err != nil {
 			logger.Error("发送年报失败", zap.Error(err))
 		} else {
 			logger.Info("年报发送成功")
@@ -250,6 +274,27 @@ func initConfig() {
 			DailyEnabled:        config.AppConfig.Reporting.DailyEnabled,
 			TestIntervalMinutes: config.AppConfig.Test.ScheduleIntervalMinutes,
 			SendTime:            config.AppConfig.Reporting.SendTime,
+
+			DayShowSummary:   config.AppConfig.Reporting.DayTemplate.ShowSummary,
+			DayShowGrowth:    config.AppConfig.Reporting.DayTemplate.ShowGrowth,
+			DayShowError:     config.AppConfig.Reporting.DayTemplate.ShowError,
+			DayShowSlow:      config.AppConfig.Reporting.DayTemplate.ShowSlow,
+			DayShowAlert:     config.AppConfig.Reporting.DayTemplate.ShowAlert,
+			WeekShowSummary:  config.AppConfig.Reporting.WeekTemplate.ShowSummary,
+			WeekShowGrowth:   config.AppConfig.Reporting.WeekTemplate.ShowGrowth,
+			WeekShowError:    config.AppConfig.Reporting.WeekTemplate.ShowError,
+			WeekShowSlow:     config.AppConfig.Reporting.WeekTemplate.ShowSlow,
+			WeekShowAlert:    config.AppConfig.Reporting.WeekTemplate.ShowAlert,
+			MonthShowSummary: config.AppConfig.Reporting.MonthTemplate.ShowSummary,
+			MonthShowGrowth:  config.AppConfig.Reporting.MonthTemplate.ShowGrowth,
+			MonthShowError:   config.AppConfig.Reporting.MonthTemplate.ShowError,
+			MonthShowSlow:    config.AppConfig.Reporting.MonthTemplate.ShowSlow,
+			MonthShowAlert:   config.AppConfig.Reporting.MonthTemplate.ShowAlert,
+			YearShowSummary:  config.AppConfig.Reporting.YearTemplate.ShowSummary,
+			YearShowGrowth:   config.AppConfig.Reporting.YearTemplate.ShowGrowth,
+			YearShowError:    config.AppConfig.Reporting.YearTemplate.ShowError,
+			YearShowSlow:     config.AppConfig.Reporting.YearTemplate.ShowSlow,
+			YearShowAlert:    config.AppConfig.Reporting.YearTemplate.ShowAlert,
 		},
 		func() {
 			runTestCycle(nil)

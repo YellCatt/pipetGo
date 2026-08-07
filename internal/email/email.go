@@ -334,6 +334,11 @@ func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimat
 
 // SendWeeklyReportEmail 发送周报邮件
 func SendWeeklyReportEmail(consecutiveFailN int, topSlowN int) error {
+	return SendWeeklyReportEmailWithTemplate(consecutiveFailN, topSlowN, reporting.DefaultWeekTemplate())
+}
+
+// SendWeeklyReportEmailWithTemplate 使用指定模板发送周报邮件
+func SendWeeklyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl reporting.ReportTemplate) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过周报邮件发送")
@@ -344,7 +349,7 @@ func SendWeeklyReportEmail(consecutiveFailN int, topSlowN int) error {
 		return nil
 	}
 
-	report, err := reporting.GenerateWeekReport(getDeviceName(), consecutiveFailN, topSlowN)
+	report, err := reporting.GenerateWeekReportWithTemplate(getDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
 		log.Printf("生成周报失败: %v\n", err)
 		return err
@@ -359,6 +364,11 @@ func SendWeeklyReportEmail(consecutiveFailN int, topSlowN int) error {
 
 // SendDailyReportEmail 发送日报邮件
 func SendDailyReportEmail(consecutiveFailN int, topSlowN int) error {
+	return SendDailyReportEmailWithTemplate(consecutiveFailN, topSlowN, reporting.DefaultDayTemplate())
+}
+
+// SendDailyReportEmailWithTemplate 使用指定模板发送日报邮件
+func SendDailyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl reporting.ReportTemplate) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过日报邮件发送")
@@ -369,7 +379,7 @@ func SendDailyReportEmail(consecutiveFailN int, topSlowN int) error {
 		return nil
 	}
 
-	report, err := reporting.GenerateDayReport(getDeviceName(), consecutiveFailN, topSlowN)
+	report, err := reporting.GenerateDayReportWithTemplate(getDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
 		log.Printf("生成日报失败: %v\n", err)
 		return err
@@ -384,6 +394,11 @@ func SendDailyReportEmail(consecutiveFailN int, topSlowN int) error {
 
 // SendMonthlyReportEmail 发送月报邮件
 func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
+	return SendMonthlyReportEmailWithTemplate(consecutiveFailN, topSlowN, reporting.DefaultMonthTemplate())
+}
+
+// SendMonthlyReportEmailWithTemplate 使用指定模板发送月报邮件
+func SendMonthlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl reporting.ReportTemplate) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过月报邮件发送")
@@ -394,7 +409,7 @@ func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
 		return nil
 	}
 
-	report, err := reporting.GenerateMonthReport(getDeviceName(), consecutiveFailN, topSlowN)
+	report, err := reporting.GenerateMonthReportWithTemplate(getDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
 		log.Printf("生成月报失败: %v\n", err)
 		return err
@@ -409,6 +424,11 @@ func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
 
 // SendYearlyReportEmail 发送年报邮件
 func SendYearlyReportEmail(consecutiveFailN int, topSlowN int) error {
+	return SendYearlyReportEmailWithTemplate(consecutiveFailN, topSlowN, reporting.DefaultYearTemplate())
+}
+
+// SendYearlyReportEmailWithTemplate 使用指定模板发送年报邮件
+func SendYearlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl reporting.ReportTemplate) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
 		log.Println("邮件发送功能已禁用，跳过年报邮件发送")
@@ -419,7 +439,7 @@ func SendYearlyReportEmail(consecutiveFailN int, topSlowN int) error {
 		return nil
 	}
 
-	report, err := reporting.GenerateYearReport(getDeviceName(), consecutiveFailN, topSlowN)
+	report, err := reporting.GenerateYearReportWithTemplate(getDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
 		log.Printf("生成年报失败: %v\n", err)
 		return err

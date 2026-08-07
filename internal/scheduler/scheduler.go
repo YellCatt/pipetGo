@@ -10,6 +10,7 @@ import (
 
 	"pipetGo/internal/email"
 	"pipetGo/internal/logger"
+	"pipetGo/internal/reporting"
 	"pipetGo/internal/timeutil"
 )
 
@@ -39,6 +40,28 @@ type Config struct {
 	DailyEnabled        bool
 	TestIntervalMinutes int
 	SendTime            string
+
+	// 模板配置
+	DayShowSummary   bool
+	DayShowGrowth    bool
+	DayShowError     bool
+	DayShowSlow      bool
+	DayShowAlert     bool
+	WeekShowSummary  bool
+	WeekShowGrowth   bool
+	WeekShowError    bool
+	WeekShowSlow     bool
+	WeekShowAlert    bool
+	MonthShowSummary bool
+	MonthShowGrowth  bool
+	MonthShowError   bool
+	MonthShowSlow    bool
+	MonthShowAlert   bool
+	YearShowSummary  bool
+	YearShowGrowth   bool
+	YearShowError    bool
+	YearShowSlow     bool
+	YearShowAlert    bool
 }
 
 type TestRunner func()
@@ -184,7 +207,8 @@ func checkAndSendReports(dataDir string, cfg Config, sendHour, sendMinute int) {
 
 	if cfg.DailyEnabled && state.LastSentDaily != dayKey {
 		logger.Info("发送日报...")
-		if err := email.SendDailyReportEmail(consecutiveFailN, topSlowN); err != nil {
+		dayTmpl := reporting.NewReportTemplate("日报", "本日", cfg.DayShowSummary, cfg.DayShowGrowth, cfg.DayShowError, cfg.DayShowSlow, cfg.DayShowAlert)
+		if err := email.SendDailyReportEmailWithTemplate(consecutiveFailN, topSlowN, dayTmpl); err != nil {
 			logger.Error("发送日报失败: " + err.Error())
 		} else {
 			state.LastSentDaily = dayKey
@@ -194,7 +218,8 @@ func checkAndSendReports(dataDir string, cfg Config, sendHour, sendMinute int) {
 
 	if weekday == 1 && cfg.WeeklyEnabled && state.LastSentWeekly != weekKey {
 		logger.Info("发送周报...")
-		if err := email.SendWeeklyReportEmail(consecutiveFailN, topSlowN); err != nil {
+		weekTmpl := reporting.NewReportTemplate("周报", "本周", cfg.WeekShowSummary, cfg.WeekShowGrowth, cfg.WeekShowError, cfg.WeekShowSlow, cfg.WeekShowAlert)
+		if err := email.SendWeeklyReportEmailWithTemplate(consecutiveFailN, topSlowN, weekTmpl); err != nil {
 			logger.Error("发送周报失败: " + err.Error())
 		} else {
 			state.LastSentWeekly = weekKey
@@ -205,7 +230,8 @@ func checkAndSendReports(dataDir string, cfg Config, sendHour, sendMinute int) {
 	dayOfMonth := now.Day()
 	if dayOfMonth == 1 && cfg.MonthlyEnabled && state.LastSentMonthly != monthKey {
 		logger.Info("发送月报...")
-		if err := email.SendMonthlyReportEmail(consecutiveFailN, topSlowN); err != nil {
+		monthTmpl := reporting.NewReportTemplate("月报", "本月", cfg.MonthShowSummary, cfg.MonthShowGrowth, cfg.MonthShowError, cfg.MonthShowSlow, cfg.MonthShowAlert)
+		if err := email.SendMonthlyReportEmailWithTemplate(consecutiveFailN, topSlowN, monthTmpl); err != nil {
 			logger.Error("发送月报失败: " + err.Error())
 		} else {
 			state.LastSentMonthly = monthKey
@@ -215,7 +241,8 @@ func checkAndSendReports(dataDir string, cfg Config, sendHour, sendMinute int) {
 
 	if dayOfMonth == 1 && now.Month() == time.January && cfg.YearlyEnabled && state.LastSentYearly != yearKey {
 		logger.Info("发送年报...")
-		if err := email.SendYearlyReportEmail(consecutiveFailN, topSlowN); err != nil {
+		yearTmpl := reporting.NewReportTemplate("年报", "本年", cfg.YearShowSummary, cfg.YearShowGrowth, cfg.YearShowError, cfg.YearShowSlow, cfg.YearShowAlert)
+		if err := email.SendYearlyReportEmailWithTemplate(consecutiveFailN, topSlowN, yearTmpl); err != nil {
 			logger.Error("发送年报失败: " + err.Error())
 		} else {
 			state.LastSentYearly = yearKey

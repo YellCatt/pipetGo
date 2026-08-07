@@ -1,0 +1,81 @@
+// Package reporting 提供周报月报年报生成、趋势图（ASCII）和慢接口分析功能
+package reporting
+
+import (
+	"pipetGo/internal/storage"
+	"pipetGo/internal/timeutil"
+)
+
+// WeekReport 表示周报内容
+type WeekReport struct {
+	StartDate  string
+	EndDate    string
+	DailyStats []storage.DailySummary
+	SlowCases  []storage.CaseAvgDuration
+	AlertCases []storage.ConsecutiveFailureInfo
+	DeviceName string
+	Template   ReportTemplate
+}
+
+// GenerateWeekReport 生成本周报告
+func GenerateWeekReport(deviceName string, consecutiveFailN int, topSlowN int) (*WeekReport, error) {
+	now := timeutil.Now()
+	weekday := int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	start := now.AddDate(0, 0, -(weekday - 1))
+	startDate := start.Format("2006-01-02")
+	endDate := now.Format("2006-01-02")
+
+	stats, err := storage.GetDailySummaries(startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	slowCases, err := storage.GetCaseAverageDurations("desc")
+	if err != nil {
+		slowCases = nil
+	}
+	if topSlowN <= 0 {
+		topSlowN = 10
+	}
+	if len(slowCases) > topSlowN {
+		slowCases = slowCases[:topSlowN]
+	}
+
+	alertCases, err := storage.GetConsecutiveFailures(consecutiveFailN)
+	if err != nil {
+		alertCases = nil
+	}
+
+	return &WeekReport{
+		StartDate:  startDate,
+		EndDate:    endDate,
+		DailyStats: stats,
+		SlowCases:  slowCases,
+		AlertCases: alertCases,
+		DeviceName: deviceName,
+		Template:   DefaultWeekTemplate(),
+	}, nil
+}
+
+// GenerateWeekReportWithTemplate 使用指定模板生成本周报告
+func GenerateWeekReportWithTemplate(deviceName string, consecutiveFailN int, topSlowN int, tmpl ReportTemplate) (*WeekReport, error) {
+	report, err := GenerateWeekReport(deviceName, consecutiveFailN, topSlowN)
+	if err != nil {
+		return nil, err
+	}
+	report.Template = tmpl
+	return report, nil
+}
+
+// FormatWeekReport 格式化周报为纯文本
+func (r *WeekReport) FormatWeekReport() string {
+	return formatReportText(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+}
+
+// FormatWeekReportHTML 格式化周报为HTML（用于邮件）
+func (r *WeekReport) FormatWeekReportHTML() string {
+	return formatReportHTML(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+}

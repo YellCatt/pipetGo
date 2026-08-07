@@ -60,3 +60,31 @@ reporting:
   daily_enabled: true       # 是否启用日报
   daily_summary: true       # 是否记录每日汇总
   send_time: "05:00"        # 报告发送时间，格式 HH:MM
+  # 日报模板配置（控制报告中各模块的显示）
+  day_template:
+    show_summary: true      # 是否显示汇总统计
+    show_growth: true       # 是否显示用例增长趋势图
+    show_error: true        # 是否显示错误率趋势图
+    show_slow: true         # 是否显示慢接口排名
+    show_alert: true        # 是否显示连续失败告警
+  # 周报模板配置
+  week_template:
+    show_summary: true
+    show_growth: true
+    show_error: true
+    show_slow: true
+    show_alert: true
+  # 月报模板配置
+  month_template:
+    show_summary: true
+    show_growth: true
+    show_error: true
+    show_slow: true
+    show_alert: true
+  # 年报模板配置
+  year_template:
+    show_summary: true
+    show_growth: true
+    show_error: true
+    show_slow: true
+    show_alert: true

@@ -92,9 +92,22 @@ type ReportingConfig struct {
 	WeeklyEnabled    bool   `mapstructure:"weekly_enabled"`     // 是否启用周报
 	MonthlyEnabled   bool   `mapstructure:"monthly_enabled"`    // 是否启用月报
 	YearlyEnabled    bool   `mapstructure:"yearly_enabled"`     // 是否启用年报
-	DailyEnabled     bool   `mapstructure:"daily_enabled"`      // 是否启用日报
-	DailySummary     bool   `mapstructure:"daily_summary"`      // 是否启用每日汇总记录
-	SendTime         string `mapstructure:"send_time"`          // 报告发送时间，格式 "HH:MM"，默认 "05:00"
+	DailyEnabled     bool                `mapstructure:"daily_enabled"`      // 是否启用日报
+	DailySummary     bool                `mapstructure:"daily_summary"`      // 是否启用每日汇总记录
+	SendTime         string              `mapstructure:"send_time"`          // 报告发送时间，格式 "HH:MM"，默认 "05:00"
+	DayTemplate      ReportTemplateConfig  `mapstructure:"day_template"`       // 日报模板配置
+	WeekTemplate     ReportTemplateConfig  `mapstructure:"week_template"`      // 周报模板配置
+	MonthTemplate    ReportTemplateConfig  `mapstructure:"month_template"`     // 月报模板配置
+	YearTemplate     ReportTemplateConfig  `mapstructure:"year_template"`      // 年报模板配置
+}
+
+// ReportTemplateConfig 定义报告模板的配置，控制报告中各模块的显示
+type ReportTemplateConfig struct {
+	ShowSummary bool `mapstructure:"show_summary"` // 是否显示汇总统计
+	ShowGrowth  bool `mapstructure:"show_growth"`   // 是否显示用例增长趋势图
+	ShowError   bool `mapstructure:"show_error"`    // 是否显示错误率趋势图
+	ShowSlow    bool `mapstructure:"show_slow"`     // 是否显示慢接口排名
+	ShowAlert   bool `mapstructure:"show_alert"`    // 是否显示连续失败告警
 }
 
 // AppConfig 存储全局配置实例
@@ -222,6 +235,25 @@ func applyReportingDefaults(cfg *Config) {
 	}
 	if !viper.IsSet("reporting.daily_summary") {
 		cfg.Reporting.DailySummary = true
+	}
+
+	// 模板默认值：全部显示
+	applyTemplateDefaults(&cfg.Reporting.DayTemplate)
+	applyTemplateDefaults(&cfg.Reporting.WeekTemplate)
+	applyTemplateDefaults(&cfg.Reporting.MonthTemplate)
+	applyTemplateDefaults(&cfg.Reporting.YearTemplate)
+}
+
+// applyTemplateDefaults 设置模板配置的默认值（全部显示）
+func applyTemplateDefaults(t *ReportTemplateConfig) {
+	if !viper.IsSet("reporting.day_template") && !viper.IsSet("reporting.week_template") &&
+		!viper.IsSet("reporting.month_template") && !viper.IsSet("reporting.year_template") {
+		// 如果用户完全没有配置任何模板，则全部默认开启
+		t.ShowSummary = true
+		t.ShowGrowth = true
+		t.ShowError = true
+		t.ShowSlow = true
+		t.ShowAlert = true
 	}
 }
 
