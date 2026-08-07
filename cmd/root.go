@@ -358,16 +358,7 @@ func runTestCycle(paths []string) {
 	cfg := config.GetConfig()
 	fmt.Printf("[DEBUG] 获取配置完成, test_case_dir=%v, data_dir=%s\n", cfg.Test.TestCaseDir, cfg.Test.DataDir)
 
-	// 启动时打印横幅到 stdout，确保手动执行时能看到输出
-	fmt.Println()
-	fmt.Println("╔════════════════════════════════════════════════════════╗")
-	fmt.Println("║           pipetGo API 测试工具                          ║")
-	fmt.Println("╠════════════════════════════════════════════════════════╣")
-	fmt.Printf("║  启动时间: %-43s ║\n", timeutil.FormatDateTime(timeutil.Now()))
-	fmt.Printf("║  测试设备: %-43s ║\n", cfg.Test.DeviceName)
-	fmt.Printf("║  日志文件: %-43s ║\n", cfg.Log.Output)
-	fmt.Println("╚════════════════════════════════════════════════════════╝")
-	fmt.Println()
+	fmt.Print(reporting.StartupBanner(cfg.Test.DeviceName, cfg.Log.Output))
 
 	fmt.Println("[DEBUG] 初始化 HTTP 客户端")
 	// 初始化 HTTP 客户端
@@ -466,29 +457,11 @@ func runTestCycle(paths []string) {
 	// 打印本次执行的测试用例统计信息
 	executedCount, executedChainCount, executedIndependentCount := testcase.CountTestSummary(testCases)
 
-	fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
-	fmt.Printf("║ 测试用例统计信息                                       ║\n")
-	fmt.Printf("╠════════════════════════════════════════════════════════╣\n")
-	fmt.Printf("║ 解析出的测试用例总数: %-35d║\n", totalTestCaseCount)
-	fmt.Printf("║   链式测试: %-43d║\n", totalChainCount)
-	fmt.Printf("║   独立测试: %-43d║\n", totalIndependentCount)
-	if len(tags) > 0 {
-		fmt.Printf("║ 应用标签过滤: %-40s║\n", strings.Join(tags, ", "))
-		fmt.Printf("║ 过滤后实际执行数: %-36d║\n", executedCount)
-		fmt.Printf("║   链式测试: %-43d║\n", executedChainCount)
-		fmt.Printf("║   独立测试: %-43d║\n", executedIndependentCount)
-	} else {
-		fmt.Printf("║ 未应用标签过滤，本次共执行 %-27d║\n", executedCount)
-		fmt.Printf("║   链式测试: %-43d║\n", executedChainCount)
-		fmt.Printf("║   独立测试: %-43d║\n", executedIndependentCount)
-	}
-
-	fmt.Printf("╠════════════════════════════════════════════════════════╣\n")
-	fmt.Printf("║ 预估执行时间: %-41s║\n", estimatedDurationStr)
-	if rounds > 1 {
-		fmt.Printf("║ 多轮测试配置: %d 轮，每轮间隔 %dms                     ║\n", rounds, intervalMs)
-	}
-	fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
+	fmt.Print(reporting.TestStatsBanner(
+		totalTestCaseCount, totalChainCount, totalIndependentCount,
+		tags, executedCount, executedChainCount, executedIndependentCount,
+		estimatedDurationStr, rounds, intervalMs,
+	))
 
 	// 发送测试开始通知邮件
 	go func() {

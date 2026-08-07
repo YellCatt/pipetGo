@@ -5,29 +5,28 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"pipetGo/internal/storage"
 	"pipetGo/internal/timeutil"
 )
 
 // GenerateASCIIReport 生成综合ASCII报告（含进度条、百分比、耗时）
+// 使用默认 ASCII 模板
 func GenerateASCIIReport(deviceName string, consecutiveFailN int, topSlowN int) string {
-	var sb strings.Builder
+	return GenerateASCIIReportWithTemplate(deviceName, consecutiveFailN, topSlowN, DefaultASCIITemplate())
+}
 
+// GenerateASCIIReportWithTemplate 使用指定模板生成综合ASCII报告
+func GenerateASCIIReportWithTemplate(deviceName string, consecutiveFailN int, topSlowN int, tmpl ReportTemplate) string {
 	now := timeutil.Now()
-	divider := strings.Repeat("=", 68)
-	thinDivider := strings.Repeat("-", 68)
+	fromDate := now.AddDate(0, 0, -30).Format("2006-01-02")
+	toDate := now.Format("2006-01-02")
 
-	sb.WriteString(divider + "\n")
-	sb.WriteString(fmt.Sprintf("  pipetGo 综合测试报告 - %s\n", timeutil.FormatDateTime(now)))
-	sb.WriteString(divider + "\n")
-	sb.WriteString(fmt.Sprintf("  设备: %s\n\n", deviceName))
+	stats, _ := storage.GetDailySummaries(fromDate, toDate)
 
-	// 慢接口分析
 	slowCases, err := storage.GetCaseAverageDurations("desc")
 	if err != nil || len(slowCases) == 0 {
-		sb.WriteString("  [慢接口分析] (暂无足够数据)\n")
+		slowCases = nil
 	} else {
 		if topSlowN <= 0 {
 			topSlowN = 10
@@ -35,61 +34,17 @@ func GenerateASCIIReport(deviceName string, consecutiveFailN int, topSlowN int) 
 		if len(slowCases) > topSlowN {
 			slowCases = slowCases[:topSlowN]
 		}
-		sb.WriteString("  [慢接口分析 - 耗时排名]\n")
-		sb.WriteString(renderSlowCases(slowCases))
 	}
 
-	// 错误率趋势
-	sb.WriteString("\n" + thinDivider + "\n")
-	sb.WriteString("  [错误率趋势 (近30天)]\n")
-	fromDate := now.AddDate(0, 0, -30).Format("2006-01-02")
-	toDate := now.Format("2006-01-02")
-	stats, _ := storage.GetDailySummaries(fromDate, toDate)
-	sb.WriteString(renderErrorRateChart(stats))
-
-	// 用例增长趋势
-	sb.WriteString("\n" + thinDivider + "\n")
-	sb.WriteString("  [用例增长趋势 (近30天)]\n")
-	sb.WriteString(renderCaseGrowthChart(stats))
-
-	// 连续失败告警
+	var alertCases []storage.ConsecutiveFailureInfo
 	if consecutiveFailN > 0 {
 		alerts, err := storage.GetConsecutiveFailures(consecutiveFailN)
 		if err == nil && len(alerts) > 0 {
-			sb.WriteString("\n" + thinDivider + "\n")
-			sb.WriteString("  ⚠️  [连续失败告警 (连续" + fmt.Sprintf("%d", consecutiveFailN) + "轮)]\n")
-			sb.WriteString(renderAlertCases(alerts))
+			alertCases = alerts
 		}
 	}
 
-	// 总体统计
-	if len(stats) > 0 {
-		sb.WriteString("\n" + thinDivider + "\n")
-		sb.WriteString("  [近30天统计]\n")
-		total, passed, failed := 0, 0, 0
-		for _, d := range stats {
-			total += d.Total
-			passed += d.Passed
-			failed += d.Failed
-		}
-		passRate := 0.0
-		if passed+failed > 0 {
-			passRate = float64(passed) / float64(passed+failed) * 100
-		}
-		sb.WriteString(fmt.Sprintf("  总执行: %d | 通过: %d | 失败: %d | 通过率: %.2f%%\n", total, passed, failed, passRate))
-
-		// ASCII 进度条展示通过率
-		barLen := int(passRate / 100 * 40)
-		bar := strings.Repeat("█", barLen)
-		space := strings.Repeat("░", 40-barLen)
-		sb.WriteString(fmt.Sprintf("  [%s%s] %.1f%%\n", bar, space, passRate))
-	}
-
-	sb.WriteString("\n" + divider + "\n")
-	sb.WriteString("  来自 pipetGo 测试程序\n")
-	sb.WriteString(divider + "\n")
-
-	return sb.String()
+	return formatReportText(tmpl, fromDate, toDate, deviceName, stats, slowCases, alertCases)
 }
 
 // GetCaseDurationList 获取所有用例耗时列表（按耗时降序）

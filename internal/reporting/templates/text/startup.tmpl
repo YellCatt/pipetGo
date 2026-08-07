@@ -1,0 +1,36 @@
+{{/* 启动横幅模板 */}}
+
+{{define "startup_header"}}
+╔════════════════════════════════════════════════════════╗
+║           pipetGo API 测试工具                          ║
+╠════════════════════════════════════════════════════════╣
+║  启动时间: {{.StartTime}} ║
+║  测试设备: {{.DeviceName}} ║
+║  日志文件: {{.LogFile}} ║
+╚════════════════════════════════════════════════════════╝
+{{end}}
+
+{{define "startup_stats"}}
+════════════════════════════════════════════════════════╗
+║ 测试用例统计信息                                       ║
+╠════════════════════════════════════════════════════════╣
+║ 解析出的测试用例总数: {{.TotalCountLine}}║
+║   链式测试: {{.ChainCountLine}}║
+║   独立测试: {{.IndependentCountLine}}║
+{{if .HasTags}}
+║ 应用标签过滤: {{.TagsLine}}║
+║ 过滤后实际执行数: {{.ExecutedCountLine}}║
+║   链式测试: {{.ExecutedChainCountLine}}║
+║   独立测试: {{.ExecutedIndependentCountLine}}║
+{{else}}
+║ 未应用标签过滤，本次共执行 {{.NoTagExecutedLine}}║
+║   链式测试: {{.ExecutedChainCountLine}}║
+║   独立测试: {{.ExecutedIndependentCountLine}}║
+{{end}}
+╠════════════════════════════════════════════════════════╣
+║ 预估执行时间: {{.EstimatedDurationLine}}║
+{{if .HasMultipleRounds}}
+║ 多轮测试配置: {{.RoundsLine}}║
+{{end}}
+╚════════════════════════════════════════════════════════╝
+{{end}}

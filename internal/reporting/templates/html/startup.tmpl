@@ -1,0 +1,28 @@
+{{/* 启动横幅HTML模板 */}}
+
+{{define "startup_header"}}
+<html><body style="font-family: monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px;">
+<h2 style="color: #00d4ff;">pipetGo API 测试工具</h2>
+<p>启动时间: {{.StartTimeRaw}}</p>
+<p>测试设备: <b>{{.DeviceNameRaw}}</b></p>
+<p>日志文件: {{.LogFileRaw}}</p>
+{{end}}
+
+{{define "startup_stats"}}
+<h3>测试用例统计信息</h3>
+<p>解析出的测试用例总数: {{.TotalCount}}</p>
+<p>链式测试: {{.ChainCount}} | 独立测试: {{.IndependentCount}}</p>
+{{if .HasTags}}
+<p>应用标签过滤: {{.TagsStr}}</p>
+<p>过滤后实际执行数: {{.ExecutedCount}}</p>
+<p>链式测试: {{.ExecutedChainCount}} | 独立测试: {{.ExecutedIndependentCount}}</p>
+{{else}}
+<p>未应用标签过滤，本次共执行 {{.ExecutedCount}}</p>
+<p>链式测试: {{.ExecutedChainCount}} | 独立测试: {{.ExecutedIndependentCount}}</p>
+{{end}}
+<p>预估执行时间: {{.EstimatedDuration}}</p>
+{{if .HasMultipleRounds}}
+<p>多轮测试配置: {{.Rounds}} 轮，每轮间隔 {{.IntervalMs}}ms</p>
+{{end}}
+</body></html>
+{{end}}

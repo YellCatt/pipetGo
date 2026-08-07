@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"time"
 
 	"pipetGo/internal/storage"
-	"pipetGo/internal/timeutil"
 )
 
 const (
@@ -17,13 +15,13 @@ const (
 
 // ReportTemplate 定义报告模板，控制报告中各模块的显示与顺序
 type ReportTemplate struct {
-	ReportType   string // 报告类型名称（日报/周报/月报/年报）
-	PeriodLabel  string // 周期标签（本日/本周/本月/本年）
-	ShowSummary  bool   // 是否显示汇总统计
-	ShowGrowth   bool   // 是否显示用例增长趋势图
-	ShowError    bool   // 是否显示错误率趋势图
-	ShowSlow     bool   // 是否显示慢接口排名
-	ShowAlert    bool   // 是否显示连续失败告警
+	ReportType  string // 报告类型名称（日报/周报/月报/年报）
+	PeriodLabel string // 周期标签（本日/本周/本月/本年）
+	ShowSummary bool   // 是否显示汇总统计
+	ShowGrowth  bool   // 是否显示用例增长趋势图
+	ShowError   bool   // 是否显示错误率趋势图
+	ShowSlow    bool   // 是否显示慢接口排名
+	ShowAlert   bool   // 是否显示连续失败告警
 }
 
 // DefaultDayTemplate 返回日报默认模板
@@ -78,6 +76,19 @@ func DefaultYearTemplate() ReportTemplate {
 	}
 }
 
+// DefaultASCIITemplate 返回ASCII综合报告默认模板
+func DefaultASCIITemplate() ReportTemplate {
+	return ReportTemplate{
+		ReportType:  "综合报告",
+		PeriodLabel: "近30天",
+		ShowSummary: true,
+		ShowGrowth:  true,
+		ShowError:   true,
+		ShowSlow:    true,
+		ShowAlert:   true,
+	}
+}
+
 // NewReportTemplate 根据配置参数创建报告模板
 // reportType: 报告类型名称（日报/周报/月报/年报）
 // periodLabel: 周期标签（本日/本周/本月/本年）
@@ -96,131 +107,32 @@ func NewReportTemplate(reportType, periodLabel string, showSummary, showGrowth, 
 
 // formatReportText 使用模板格式化报告为纯文本
 func formatReportText(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
-	var sb strings.Builder
-
-	divider := strings.Repeat("=", 68)
-	thinDivider := strings.Repeat("-", 68)
-
-	sb.WriteString(divider + "\n")
-	sb.WriteString(fmt.Sprintf("  pipetGo 测试%s  (%s ~ %s)\n", tmpl.ReportType, startDate, endDate))
-	sb.WriteString(divider + "\n")
-	sb.WriteString(fmt.Sprintf("  设备: %s\n", deviceName))
-	sb.WriteString(fmt.Sprintf("  生成时间: %s\n\n", timeutil.FormatDateTime(timeutil.Now())))
-
-	// 汇总统计
-	if tmpl.ShowSummary && len(dailyStats) > 0 {
-		total, passed, failed, skipped := 0, 0, 0, 0
-		var totalDur time.Duration
-		for _, d := range dailyStats {
-			total += d.Total
-			passed += d.Passed
-			failed += d.Failed
-			skipped += d.Skipped
-			totalDur += time.Duration(d.TotalDurationMs) * time.Millisecond
-		}
-		sb.WriteString(fmt.Sprintf("  %s汇总:\n", tmpl.PeriodLabel))
-		sb.WriteString(fmt.Sprintf("    总执行: %d | 通过: %d | 失败: %d | 跳过: %d\n", total, passed, failed, skipped))
-		passRate := float64(0)
-		if passed+failed > 0 {
-			passRate = float64(passed) / float64(passed+failed) * 100
-		}
-		sb.WriteString(fmt.Sprintf("    通过率: %.2f%% | 总耗时: %v\n", passRate, totalDur))
-	}
-
-	// 用例增长趋势图
-	if tmpl.ShowGrowth {
-		sb.WriteString("\n" + thinDivider + "\n")
-		sb.WriteString("  [用例增长趋势图]\n")
-		sb.WriteString(renderCaseGrowthChart(dailyStats))
-	}
-
-	// 错误率趋势图
-	if tmpl.ShowError {
-		sb.WriteString("\n" + thinDivider + "\n")
-		sb.WriteString("  [错误率趋势图]\n")
-		sb.WriteString(renderErrorRateChart(dailyStats))
-	}
-
-	// 慢接口排名
-	if tmpl.ShowSlow && len(slowCases) > 0 {
-		sb.WriteString("\n" + thinDivider + "\n")
-		sb.WriteString("  [最慢接口 TOP " + fmt.Sprintf("%d", len(slowCases)) + "]\n")
-		sb.WriteString(renderSlowCases(slowCases))
-	}
-
-	// 连续失败告警
-	if tmpl.ShowAlert && len(alertCases) > 0 {
-		sb.WriteString("\n" + thinDivider + "\n")
-		sb.WriteString("  ⚠️  [连续失败告警]\n")
-		sb.WriteString(renderAlertCases(alertCases))
-	}
-
-	sb.WriteString("\n" + divider + "\n")
-	sb.WriteString("  来自 pipetGo 测试程序\n")
-	sb.WriteString(divider + "\n")
-
-	return sb.String()
+	data := BuildReportData(tmpl, startDate, endDate, deviceName, dailyStats, slowCases, alertCases)
+	return MustRenderText(tmplNameFromType(tmpl.ReportType), data)
 }
 
 // formatReportHTML 使用模板格式化报告为HTML
 func formatReportHTML(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
-	var sb strings.Builder
+	data := BuildReportData(tmpl, startDate, endDate, deviceName, dailyStats, slowCases, alertCases)
+	return MustRenderHTML(tmplNameFromType(tmpl.ReportType), data)
+}
 
-	sb.WriteString(`<html><body style="font-family: monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px;">`)
-	sb.WriteString(fmt.Sprintf(`<h2 style="color: #00d4ff;">pipetGo 测试%s (%s ~ %s)</h2>`, tmpl.ReportType, startDate, endDate))
-	sb.WriteString(fmt.Sprintf(`<p>设备: <b>%s</b> | 生成时间: %s</p>`, deviceName, timeutil.FormatDateTime(timeutil.Now())))
-
-	if tmpl.ShowSummary && len(dailyStats) > 0 {
-		total, passed, failed, skipped := 0, 0, 0, 0
-		var totalDur time.Duration
-		for _, d := range dailyStats {
-			total += d.Total
-			passed += d.Passed
-			failed += d.Failed
-			skipped += d.Skipped
-			totalDur += time.Duration(d.TotalDurationMs) * time.Millisecond
-		}
-		passRate := float64(0)
-		if passed+failed > 0 {
-			passRate = float64(passed) / float64(passed+failed) * 100
-		}
-		sb.WriteString(fmt.Sprintf(`<h3>%s汇总</h3>`, tmpl.PeriodLabel))
-		sb.WriteString(fmt.Sprintf(`<p>总执行: %d | 通过: %d | 失败: <span style="color: #ff4444;">%d</span> | 跳过: %d</p>`, total, passed, failed, skipped))
-		sb.WriteString(fmt.Sprintf(`<p>通过率: %.2f%% | 总耗时: %v</p>`, passRate, totalDur))
+// tmplNameFromType 根据报告类型返回模板名称
+func tmplNameFromType(reportType string) string {
+	switch reportType {
+	case "日报":
+		return "daily"
+	case "周报":
+		return "weekly"
+	case "月报":
+		return "monthly"
+	case "年报":
+		return "yearly"
+	case "综合报告":
+		return "ascii"
+	default:
+		return "daily"
 	}
-
-	if tmpl.ShowGrowth {
-		sb.WriteString(`<h3>用例增长趋势</h3>`)
-		sb.WriteString(`<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">`)
-		sb.WriteString(renderCaseGrowthChart(dailyStats))
-		sb.WriteString(`</pre>`)
-	}
-
-	if tmpl.ShowError {
-		sb.WriteString(`<h3>错误率趋势</h3>`)
-		sb.WriteString(`<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">`)
-		sb.WriteString(renderErrorRateChart(dailyStats))
-		sb.WriteString(`</pre>`)
-	}
-
-	if tmpl.ShowSlow && len(slowCases) > 0 {
-		sb.WriteString(`<h3>最慢接口 TOP ` + fmt.Sprintf("%d", len(slowCases)) + `</h3>`)
-		sb.WriteString(`<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">`)
-		sb.WriteString(renderSlowCases(slowCases))
-		sb.WriteString(`</pre>`)
-	}
-
-	if tmpl.ShowAlert && len(alertCases) > 0 {
-		sb.WriteString(`<h3 style="color: #ff4444;">⚠️ 连续失败告警</h3>`)
-		sb.WriteString(`<pre style="background: #2a0000; padding: 10px; border-radius: 4px; color: #ff6666;">`)
-		sb.WriteString(renderAlertCases(alertCases))
-		sb.WriteString(`</pre>`)
-	}
-
-	sb.WriteString(`<p style="color: #666;">来自 pipetGo 测试程序</p>`)
-	sb.WriteString(`</body></html>`)
-
-	return sb.String()
 }
 
 // renderCaseGrowthChart 渲染用例增长趋势 ASCII 横向图

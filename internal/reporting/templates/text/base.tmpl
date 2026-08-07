@@ -1,0 +1,72 @@
+{{/* 报告公共基础模板 */}}
+
+{{/* 报告头部 */}}
+{{define "header"}}
+============================================================
+  pipetGo 测试{{.ReportType}}  ({{.StartDate}} ~ {{.EndDate}})
+============================================================
+  设备: {{.DeviceName}}
+  生成时间: {{.GeneratedAt}}
+{{end}}
+
+{{/* 汇总统计 */}}
+{{define "summary"}}
+  {{.PeriodLabel}}汇总:
+    总执行: {{.Total}} | 通过: {{.Passed}} | 失败: {{.Failed}} | 跳过: {{.Skipped}}
+    通过率: {{printf "%.2f" .PassRate}}% | 总耗时: {{.TotalDuration}}
+    [{{.PassBar}}{{.PassSpace}}] {{printf "%.1f" .PassRate}}%
+{{end}}
+
+{{/* 用例增长趋势图 */}}
+{{define "growth_chart"}}
+------------------------------------------------------------
+  [用例增长趋势图]
+{{.GrowthChart}}
+{{end}}
+
+{{/* 错误率趋势图 */}}
+{{define "error_chart"}}
+------------------------------------------------------------
+  [错误率趋势图]
+{{.ErrorChart}}
+{{end}}
+
+{{/* 慢接口排名 */}}
+{{define "slow_cases"}}
+------------------------------------------------------------
+  [最慢接口 TOP {{.SlowCount}}]
+{{.SlowChart}}
+{{end}}
+
+{{/* 连续失败告警 */}}
+{{define "alert_cases"}}
+------------------------------------------------------------
+  ⚠️  [连续失败告警]
+{{.AlertChart}}
+{{end}}
+
+{{/* 报告尾部 */}}
+{{define "footer"}}
+============================================================
+  来自 pipetGo 测试程序
+============================================================
+{{end}}
+
+{{/* 报告主体（各模块按模板开关渲染） */}}
+{{define "report_body"}}
+{{if .ShowSummary}}
+{{template "summary" .}}
+{{end}}
+{{if .ShowGrowth}}
+{{template "growth_chart" .}}
+{{end}}
+{{if .ShowError}}
+{{template "error_chart" .}}
+{{end}}
+{{if .ShowSlow}}
+{{template "slow_cases" .}}
+{{end}}
+{{if .ShowAlert}}
+{{template "alert_cases" .}}
+{{end}}
+{{end}}

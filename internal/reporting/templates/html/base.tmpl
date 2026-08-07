@@ -1,0 +1,56 @@
+{{/* 报告HTML公共基础模板 */}}
+
+{{define "header"}}
+<html><body style="font-family: monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 20px;">
+<h2 style="color: #00d4ff;">pipetGo 测试{{.ReportType}} ({{.StartDate}} ~ {{.EndDate}})</h2>
+<p>设备: <b>{{.DeviceName}}</b> | 生成时间: {{.GeneratedAt}}</p>
+{{end}}
+
+{{define "summary"}}
+<h3>{{.PeriodLabel}}汇总</h3>
+<p>总执行: {{.Total}} | 通过: {{.Passed}} | 失败: <span style="color: #ff4444;">{{.Failed}}</span> | 跳过: {{.Skipped}}</p>
+<p>通过率: {{printf "%.2f" .PassRate}}% | 总耗时: {{.TotalDuration}}</p>
+{{end}}
+
+{{define "growth_chart"}}
+<h3>用例增长趋势</h3>
+<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">{{.GrowthChart}}</pre>
+{{end}}
+
+{{define "error_chart"}}
+<h3>错误率趋势</h3>
+<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">{{.ErrorChart}}</pre>
+{{end}}
+
+{{define "slow_cases"}}
+<h3>最慢接口 TOP {{.SlowCount}}</h3>
+<pre style="background: #0d0d1a; padding: 10px; border-radius: 4px;">{{.SlowChart}}</pre>
+{{end}}
+
+{{define "alert_cases"}}
+<h3 style="color: #ff4444;">⚠️ 连续失败告警</h3>
+<pre style="background: #2a0000; padding: 10px; border-radius: 4px; color: #ff6666;">{{.AlertChart}}</pre>
+{{end}}
+
+{{define "footer"}}
+<p style="color: #666;">来自 pipetGo 测试程序</p>
+</body></html>
+{{end}}
+
+{{define "report_body"}}
+{{if .ShowSummary}}
+{{template "summary" .}}
+{{end}}
+{{if .ShowGrowth}}
+{{template "growth_chart" .}}
+{{end}}
+{{if .ShowError}}
+{{template "error_chart" .}}
+{{end}}
+{{if .ShowSlow}}
+{{template "slow_cases" .}}
+{{end}}
+{{if .ShowAlert}}
+{{template "alert_cases" .}}
+{{end}}
+{{end}}
