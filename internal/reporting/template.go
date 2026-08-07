@@ -111,10 +111,11 @@ func formatReportText(tmpl ReportTemplate, startDate, endDate, deviceName string
 	return MustRenderText(tmplNameFromType(tmpl.ReportType), data)
 }
 
-// formatReportHTML 使用模板格式化报告为HTML
+// formatReportHTML 邮件用纯文本报告（移动端友好）
 func formatReportHTML(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
 	data := BuildReportData(tmpl, startDate, endDate, deviceName, dailyStats, slowCases, alertCases)
-	return MustRenderHTML(tmplNameFromType(tmpl.ReportType), data)
+	text := MustRenderText(tmplNameFromType(tmpl.ReportType), data)
+	return "<pre style=\"font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word;\">" + text + "</pre>"
 }
 
 // tmplNameFromType 根据报告类型返回模板名称

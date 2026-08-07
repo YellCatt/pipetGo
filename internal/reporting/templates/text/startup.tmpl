@@ -1,36 +1,29 @@
-{{/* 启动横幅模板 */}}
+{{/* 启动横幅模板 - 移动端邮件友好 */}}
 
 {{define "startup_header"}}
-╔════════════════════════════════════════════════════════╗
-║           pipetGo API 测试工具                          ║
-╠════════════════════════════════════════════════════════╣
-║  启动时间: {{.StartTime}} ║
-║  测试设备: {{.DeviceName}} ║
-║  日志文件: {{.LogFile}} ║
-╚════════════════════════════════════════════════════════╝
+━━━━━━━━━━━━━━━━━━━━━━━━
+  pipetGo API 测试工具
+━━━━━━━━━━━━━━━━━━━━━━━━
+启动时间: {{.StartTimeRaw}}
+测试设备: {{.DeviceNameRaw}}
+日志文件: {{.LogFileRaw}}
 {{end}}
 
 {{define "startup_stats"}}
-════════════════════════════════════════════════════════╗
-║ 测试用例统计信息                                       ║
-╠════════════════════════════════════════════════════════╣
-║ 解析出的测试用例总数: {{.TotalCountLine}}║
-║   链式测试: {{.ChainCountLine}}║
-║   独立测试: {{.IndependentCountLine}}║
+────────────────────────
+  测试用例统计
+────────────────────────
+解析用例: {{.TotalCount}} (链式 {{.ChainCount}} | 独立 {{.IndependentCount}})
 {{if .HasTags}}
-║ 应用标签过滤: {{.TagsLine}}║
-║ 过滤后实际执行数: {{.ExecutedCountLine}}║
-║   链式测试: {{.ExecutedChainCountLine}}║
-║   独立测试: {{.ExecutedIndependentCountLine}}║
+标签过滤: {{.TagsStr}}
+实际执行: {{.ExecutedCount}} (链式 {{.ExecutedChainCount}} | 独立 {{.ExecutedIndependentCount}})
 {{else}}
-║ 未应用标签过滤，本次共执行 {{.NoTagExecutedLine}}║
-║   链式测试: {{.ExecutedChainCountLine}}║
-║   独立测试: {{.ExecutedIndependentCountLine}}║
+无标签过滤, 共执行 {{.ExecutedCount}} (链式 {{.ExecutedChainCount}} | 独立 {{.ExecutedIndependentCount}})
 {{end}}
-╠════════════════════════════════════════════════════════╣
-║ 预估执行时间: {{.EstimatedDurationLine}}║
+────────────────────────
+预估耗时: {{.EstimatedDuration}}
 {{if .HasMultipleRounds}}
-║ 多轮测试配置: {{.RoundsLine}}║
+多轮测试: {{.Rounds}} 轮, 间隔 {{.IntervalMs}}ms
 {{end}}
-╚════════════════════════════════════════════════════════╝
+━━━━━━━━━━━━━━━━━━━━━━━━
 {{end}}

@@ -15,20 +15,13 @@ import (
 //go:embed templates/text/*.tmpl
 var textTmplFS embed.FS
 
-//go:embed templates/html/*.tmpl
-var htmlTmplFS embed.FS
-
-var (
-	textTmpl *template.Template
-	htmlTmpl *template.Template
-)
+var textTmpl *template.Template
 
 func init() {
 	funcMap := template.FuncMap{
 		"formatBytes": formatBytes,
 	}
 	textTmpl = template.Must(template.New("report").Funcs(funcMap).ParseFS(textTmplFS, "templates/text/*.tmpl"))
-	htmlTmpl = template.Must(template.New("report_html").Funcs(funcMap).ParseFS(htmlTmplFS, "templates/html/*.tmpl"))
 }
 
 // formatBytes 格式化字节数为可读字符串
@@ -90,10 +83,14 @@ type StartupStatsData struct {
 
 // BuildStartupHeaderData 构建启动头部数据
 func BuildStartupHeaderData(deviceName, logFile string) StartupHeaderData {
+	now := timeutil.FormatDateTime(timeutil.Now())
 	return StartupHeaderData{
-		StartTime:  padRight(timeutil.FormatDateTime(timeutil.Now()), 43),
-		DeviceName: padRight(deviceName, 43),
-		LogFile:    padRight(logFile, 43),
+		StartTime:     padRight(now, 43),
+		DeviceName:    padRight(deviceName, 43),
+		LogFile:       padRight(logFile, 43),
+		StartTimeRaw:  now,
+		DeviceNameRaw: deviceName,
+		LogFileRaw:    logFile,
 	}
 }
 
@@ -270,27 +267,9 @@ func RenderTextReport(tmplName string, data any) (string, error) {
 	return buf.String(), nil
 }
 
-// RenderHTMLReport 使用HTML模板渲染报告
-func RenderHTMLReport(tmplName string, data any) (string, error) {
-	var buf bytes.Buffer
-	if err := htmlTmpl.ExecuteTemplate(&buf, tmplName, data); err != nil {
-		return "", fmt.Errorf("渲染HTML模板 %s 失败: %w", tmplName, err)
-	}
-	return buf.String(), nil
-}
-
 // MustRenderText 渲染文本模板，失败时返回错误信息字符串
 func MustRenderText(tmplName string, data any) string {
 	result, err := RenderTextReport(tmplName, data)
-	if err != nil {
-		return fmt.Sprintf("模板渲染错误: %v", err)
-	}
-	return result
-}
-
-// MustRenderHTML 渲染HTML模板，失败时返回错误信息字符串
-func MustRenderHTML(tmplName string, data any) string {
-	result, err := RenderHTMLReport(tmplName, data)
 	if err != nil {
 		return fmt.Sprintf("模板渲染错误: %v", err)
 	}
