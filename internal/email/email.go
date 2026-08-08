@@ -4,17 +4,19 @@ package email
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net/smtp"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"pipetGo/internal/logger"
 	"pipetGo/internal/reporting"
 	"pipetGo/internal/storage"
 	"pipetGo/internal/testcase"
 	"pipetGo/internal/timeutil"
+
+	"go.uber.org/zap"
 )
 
 type EmailConfig struct {
@@ -86,9 +88,12 @@ func SendEmail(subject, body string) error {
 	addr := fmt.Sprintf("%s:%d", cfg.SMTPServer, cfg.SMTPPort)
 	auth := smtp.PlainAuth("", cfg.FromEmail, cfg.AuthCode, cfg.SMTPServer)
 
-	log.Printf("连接 SMTP 服务器: %s\n", addr)
+	logger.Info("开始连接 SMTP 服务器",
+		zap.String("smtp_server", cfg.SMTPServer),
+		zap.Int("smtp_port", cfg.SMTPPort),
+		zap.String("from", cfg.FromEmail),
+		zap.Int("recipients", len(cfg.ToEmail)))
 
-	// 使用 TLS 连接
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		ServerName:         cfg.SMTPServer,
@@ -96,58 +101,64 @@ func SendEmail(subject, body string) error {
 
 	conn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
-		log.Printf("TLS 连接失败: %v\n", err)
-		return err
+		logger.Error("TLS 连接 SMTP 服务器失败",
+			zap.String("addr", addr),
+			zap.Error(err))
+		return fmt.Errorf("TLS 连接失败(%s): %w", addr, err)
 	}
 	defer conn.Close()
 
 	client, err := smtp.NewClient(conn, cfg.SMTPServer)
 	if err != nil {
-		log.Printf("创建 SMTP 客户端失败: %v\n", err)
-		return err
+		logger.Error("创建 SMTP 客户端失败", zap.Error(err))
+		return fmt.Errorf("创建 SMTP 客户端失败: %w", err)
 	}
 	defer client.Close()
 
-	// 认证
 	if err := client.Auth(auth); err != nil {
-		log.Printf("SMTP 认证失败: %v\n", err)
-		return err
+		logger.Error("SMTP 认证失败",
+			zap.String("from", cfg.FromEmail),
+			zap.Error(err))
+		return fmt.Errorf("SMTP 认证失败: %w", err)
 	}
 
-	// 设置发件人
 	if err := client.Mail(cfg.FromEmail); err != nil {
-		log.Printf("设置发件人失败: %v\n", err)
-		return err
+		logger.Error("设置发件人失败",
+			zap.String("from", cfg.FromEmail),
+			zap.Error(err))
+		return fmt.Errorf("设置发件人失败: %w", err)
 	}
 
-	// 设置多个收件人
 	for _, to := range cfg.ToEmail {
 		if err := client.Rcpt(to); err != nil {
-			log.Printf("设置收件人 %s 失败: %v\n", to, err)
-			return err
+			logger.Error("设置收件人失败",
+				zap.String("to", to),
+				zap.Error(err))
+			return fmt.Errorf("设置收件人 %s 失败: %w", to, err)
 		}
 	}
 
-	// 发送邮件内容
 	w, err := client.Data()
 	if err != nil {
-		log.Printf("获取数据写入器失败: %v\n", err)
-		return err
+		logger.Error("获取数据写入器失败", zap.Error(err))
+		return fmt.Errorf("获取数据写入器失败: %w", err)
 	}
 
 	_, err = w.Write(msg)
 	if err != nil {
-		log.Printf("写入邮件内容失败: %v\n", err)
-		return err
+		logger.Error("写入邮件内容失败", zap.Error(err))
+		return fmt.Errorf("写入邮件内容失败: %w", err)
 	}
 
 	err = w.Close()
 	if err != nil {
-		log.Printf("关闭数据写入器失败: %v\n", err)
-		return err
+		logger.Error("关闭数据写入器失败", zap.Error(err))
+		return fmt.Errorf("关闭数据写入器失败: %w", err)
 	}
 
-	log.Println("✅ 邮件发送成功")
+	logger.Info("邮件发送成功",
+		zap.String("subject", subject),
+		zap.String("recipients", toEmails))
 	return nil
 }
 
@@ -236,20 +247,25 @@ func truncateString(s string, maxLen int) string {
 func SendTestReportEmail(results []testcase.TestResult) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
-		log.Println("邮件发送功能已禁用，跳过邮件发送")
+		logger.Warn("邮件发送功能已禁用，跳过测试报告邮件发送")
 		return nil
 	}
 	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
-		log.Println("邮件配置未设置，跳过邮件发送")
+		logger.Warn("邮件配置不完整，跳过测试报告邮件发送",
+			zap.Bool("enabled", cfg.Enabled),
+			zap.String("from", cfg.FromEmail),
+			zap.Int("to_count", len(cfg.ToEmail)),
+			zap.Bool("has_auth", cfg.AuthCode != ""))
 		return nil
 	}
 
-	// 使用东八区时间
 	subject := fmt.Sprintf("【测试报告】pipetGo - %s - %s", getDeviceName(), timeutil.FormatDateTime(timeutil.Now()))
 
 	body := GenerateTestReportContent(results)
 
-	log.Println("发送测试报告邮件...")
+	logger.Info("开始发送测试报告邮件",
+		zap.String("subject", subject),
+		zap.Int("result_count", len(results)))
 	return SendEmail(subject, body)
 }
 
@@ -257,11 +273,15 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 func SendErrorReportEmail(errorMessage string) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
-		log.Println("邮件发送功能已禁用，跳过邮件发送")
+		logger.Warn("邮件发送功能已禁用，跳过异常报告邮件发送")
 		return nil
 	}
 	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
-		log.Println("邮件配置未设置，跳过邮件发送")
+		logger.Warn("邮件配置不完整，跳过异常报告邮件发送",
+			zap.Bool("enabled", cfg.Enabled),
+			zap.String("from", cfg.FromEmail),
+			zap.Int("to_count", len(cfg.ToEmail)),
+			zap.Bool("has_auth", cfg.AuthCode != ""))
 		return nil
 	}
 
@@ -276,7 +296,8 @@ func SendErrorReportEmail(errorMessage string) error {
 	body.WriteString("\n===== 报告结束 =====\n")
 	body.WriteString("来自 pipetGo 测试程序")
 
-	log.Println("发送异常报告邮件...")
+	logger.Info("开始发送异常报告邮件",
+		zap.String("subject", subject))
 	return SendEmail(subject, body.String())
 }
 
@@ -284,15 +305,18 @@ func SendErrorReportEmail(errorMessage string) error {
 func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimatedDuration time.Duration, rounds int, intervalMs int) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
-		log.Println("邮件发送功能已禁用，跳过邮件发送")
+		logger.Warn("邮件发送功能已禁用，跳过测试开始通知邮件发送")
 		return nil
 	}
 	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
-		log.Println("邮件配置未设置，跳过邮件发送")
+		logger.Warn("邮件配置不完整，跳过测试开始通知邮件发送",
+			zap.Bool("enabled", cfg.Enabled),
+			zap.String("from", cfg.FromEmail),
+			zap.Int("to_count", len(cfg.ToEmail)),
+			zap.Bool("has_auth", cfg.AuthCode != ""))
 		return nil
 	}
 
-	// 使用东八区时间
 	now := timeutil.Now()
 	subject := fmt.Sprintf("【测试开始】pipetGo - %s - %s", getDeviceName(), timeutil.FormatDateTime(now))
 
@@ -312,10 +336,8 @@ func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimat
 	}
 
 	if estimatedDuration > 0 {
-		// 计算多轮测试的总预估时间
 		totalDuration := estimatedDuration * time.Duration(rounds)
 		if rounds > 1 {
-			// 添加轮间隔时间
 			totalDuration += time.Duration((rounds-1)*intervalMs) * time.Millisecond
 		}
 		estimatedEndTime := now.Add(totalDuration)
@@ -328,7 +350,9 @@ func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimat
 	body.WriteString("\n===== 通知结束 =====\n")
 	body.WriteString("来自 pipetGo 测试程序")
 
-	log.Println("发送测试开始通知邮件...")
+	logger.Info("开始发送测试开始通知邮件",
+		zap.String("subject", subject),
+		zap.Int("total_cases", testCaseCount))
 	return SendEmail(subject, body.String())
 }
 
@@ -341,24 +365,29 @@ func SendWeeklyReportEmail(consecutiveFailN int, topSlowN int) error {
 func SendWeeklyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl reporting.ReportTemplate) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
-		log.Println("邮件发送功能已禁用，跳过周报邮件发送")
+		logger.Warn("邮件发送功能已禁用，跳过周报邮件发送")
 		return nil
 	}
 	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
-		log.Println("邮件配置未设置，跳过周报邮件发送")
+		logger.Warn("邮件配置不完整，跳过周报邮件发送",
+			zap.Bool("enabled", cfg.Enabled),
+			zap.String("from", cfg.FromEmail),
+			zap.Int("to_count", len(cfg.ToEmail)),
+			zap.Bool("has_auth", cfg.AuthCode != ""))
 		return nil
 	}
 
 	report, err := reporting.GenerateWeekReportWithTemplate(getDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
-		log.Printf("生成周报失败: %v\n", err)
+		logger.Error("生成周报失败", zap.Error(err))
 		return err
 	}
 
 	subject := fmt.Sprintf("【测试周报】pipetGo - %s (%s ~ %s)", getDeviceName(), report.StartDate, report.EndDate)
 	body := report.FormatWeekReport()
 
-	log.Println("发送测试周报邮件...")
+	logger.Info("开始发送周报邮件",
+		zap.String("subject", subject))
 	return SendEmail(subject, body)
 }
 
@@ -371,24 +400,29 @@ func SendDailyReportEmail(consecutiveFailN int, topSlowN int) error {
 func SendDailyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl reporting.ReportTemplate) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
-		log.Println("邮件发送功能已禁用，跳过日报邮件发送")
+		logger.Warn("邮件发送功能已禁用，跳过日报邮件发送")
 		return nil
 	}
 	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
-		log.Println("邮件配置未设置，跳过日报邮件发送")
+		logger.Warn("邮件配置不完整，跳过日报邮件发送",
+			zap.Bool("enabled", cfg.Enabled),
+			zap.String("from", cfg.FromEmail),
+			zap.Int("to_count", len(cfg.ToEmail)),
+			zap.Bool("has_auth", cfg.AuthCode != ""))
 		return nil
 	}
 
 	report, err := reporting.GenerateDayReportWithTemplate(getDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
-		log.Printf("生成日报失败: %v\n", err)
+		logger.Error("生成日报失败", zap.Error(err))
 		return err
 	}
 
 	subject := fmt.Sprintf("【测试日报】pipetGo - %s (%s)", getDeviceName(), report.Date)
 	body := report.FormatDayReport()
 
-	log.Println("发送测试日报邮件...")
+	logger.Info("开始发送日报邮件",
+		zap.String("subject", subject))
 	return SendEmail(subject, body)
 }
 
@@ -401,24 +435,29 @@ func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
 func SendMonthlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl reporting.ReportTemplate) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
-		log.Println("邮件发送功能已禁用，跳过月报邮件发送")
+		logger.Warn("邮件发送功能已禁用，跳过月报邮件发送")
 		return nil
 	}
 	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
-		log.Println("邮件配置未设置，跳过月报邮件发送")
+		logger.Warn("邮件配置不完整，跳过月报邮件发送",
+			zap.Bool("enabled", cfg.Enabled),
+			zap.String("from", cfg.FromEmail),
+			zap.Int("to_count", len(cfg.ToEmail)),
+			zap.Bool("has_auth", cfg.AuthCode != ""))
 		return nil
 	}
 
 	report, err := reporting.GenerateMonthReportWithTemplate(getDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
-		log.Printf("生成月报失败: %v\n", err)
+		logger.Error("生成月报失败", zap.Error(err))
 		return err
 	}
 
 	subject := fmt.Sprintf("【测试月报】pipetGo - %s (%s ~ %s)", getDeviceName(), report.StartDate, report.EndDate)
 	body := report.FormatMonthReport()
 
-	log.Println("发送测试月报邮件...")
+	logger.Info("开始发送月报邮件",
+		zap.String("subject", subject))
 	return SendEmail(subject, body)
 }
 
@@ -431,24 +470,29 @@ func SendYearlyReportEmail(consecutiveFailN int, topSlowN int) error {
 func SendYearlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl reporting.ReportTemplate) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
-		log.Println("邮件发送功能已禁用，跳过年报邮件发送")
+		logger.Warn("邮件发送功能已禁用，跳过年报邮件发送")
 		return nil
 	}
 	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
-		log.Println("邮件配置未设置，跳过年报邮件发送")
+		logger.Warn("邮件配置不完整，跳过年报邮件发送",
+			zap.Bool("enabled", cfg.Enabled),
+			zap.String("from", cfg.FromEmail),
+			zap.Int("to_count", len(cfg.ToEmail)),
+			zap.Bool("has_auth", cfg.AuthCode != ""))
 		return nil
 	}
 
 	report, err := reporting.GenerateYearReportWithTemplate(getDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
-		log.Printf("生成年报失败: %v\n", err)
+		logger.Error("生成年报失败", zap.Error(err))
 		return err
 	}
 
 	subject := fmt.Sprintf("【测试年报】pipetGo - %s (%s ~ %s)", getDeviceName(), report.StartDate, report.EndDate)
 	body := report.FormatYearReport()
 
-	log.Println("发送测试年报邮件...")
+	logger.Info("开始发送年报邮件",
+		zap.String("subject", subject))
 	return SendEmail(subject, body)
 }
 
@@ -456,13 +500,22 @@ func SendYearlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl 
 func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFailN int, topSlowN int) error {
 	cfg := GetConfig()
 	if !cfg.Enabled {
-		log.Println("邮件发送功能已禁用，跳过邮件发送")
+		logger.Warn("邮件发送功能已禁用，跳过测试报告邮件发送")
 		return nil
 	}
 	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
-		log.Println("邮件配置未设置，跳过邮件发送")
+		logger.Warn("邮件配置不完整，跳过测试报告邮件发送",
+			zap.Bool("enabled", cfg.Enabled),
+			zap.String("from", cfg.FromEmail),
+			zap.Int("to_count", len(cfg.ToEmail)),
+			zap.Bool("has_auth", cfg.AuthCode != ""))
 		return nil
 	}
+
+	logger.Info("准备发送测试报告邮件",
+		zap.Int("result_count", len(results)),
+		zap.Int("consecutive_fail_n", consecutiveFailN),
+		zap.Int("top_slow_n", topSlowN))
 
 	alerts, _ := storage.GetConsecutiveFailures(consecutiveFailN)
 	alertIDs := make(map[string]bool)
@@ -576,6 +629,11 @@ func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFai
 	body.WriteString("\n===== 报告结束 =====\n")
 	body.WriteString("来自 pipetGo 测试程序")
 
-	log.Println("发送测试报告邮件...")
+	logger.Info("开始发送测试报告邮件",
+		zap.String("subject", subject),
+		zap.Int("total", totalPassed+totalFailed+totalSkipped),
+		zap.Int("passed", totalPassed),
+		zap.Int("failed", totalFailed),
+		zap.Float64("pass_rate", passRate))
 	return SendEmail(subject, body.String())
 }

@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"pipetGo/internal/logger"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -87,27 +89,27 @@ type CleanupConfig struct {
 
 // ReportingConfig 表示报告和告警相关的配置
 type ReportingConfig struct {
-	ConsecutiveFailN int    `mapstructure:"consecutive_fail_n"` // 连续失败N轮告警阈值
-	TopSlowN         int    `mapstructure:"top_slow_n"`         // 慢接口排名 TOP N
-	WeeklyEnabled    bool   `mapstructure:"weekly_enabled"`     // 是否启用周报
-	MonthlyEnabled   bool   `mapstructure:"monthly_enabled"`    // 是否启用月报
-	YearlyEnabled    bool   `mapstructure:"yearly_enabled"`     // 是否启用年报
-	DailyEnabled     bool                `mapstructure:"daily_enabled"`      // 是否启用日报
-	DailySummary     bool                `mapstructure:"daily_summary"`      // 是否启用每日汇总记录
-	SendTime         string              `mapstructure:"send_time"`          // 报告发送时间，格式 "HH:MM"，默认 "05:00"
-	DayTemplate      ReportTemplateConfig  `mapstructure:"day_template"`       // 日报模板配置
-	WeekTemplate     ReportTemplateConfig  `mapstructure:"week_template"`      // 周报模板配置
-	MonthTemplate    ReportTemplateConfig  `mapstructure:"month_template"`     // 月报模板配置
-	YearTemplate     ReportTemplateConfig  `mapstructure:"year_template"`      // 年报模板配置
+	ConsecutiveFailN int                  `mapstructure:"consecutive_fail_n"` // 连续失败N轮告警阈值
+	TopSlowN         int                  `mapstructure:"top_slow_n"`         // 慢接口排名 TOP N
+	WeeklyEnabled    bool                 `mapstructure:"weekly_enabled"`     // 是否启用周报
+	MonthlyEnabled   bool                 `mapstructure:"monthly_enabled"`    // 是否启用月报
+	YearlyEnabled    bool                 `mapstructure:"yearly_enabled"`     // 是否启用年报
+	DailyEnabled     bool                 `mapstructure:"daily_enabled"`      // 是否启用日报
+	DailySummary     bool                 `mapstructure:"daily_summary"`      // 是否启用每日汇总记录
+	SendTime         string               `mapstructure:"send_time"`          // 报告发送时间，格式 "HH:MM"，默认 "05:00"
+	DayTemplate      ReportTemplateConfig `mapstructure:"day_template"`       // 日报模板配置
+	WeekTemplate     ReportTemplateConfig `mapstructure:"week_template"`      // 周报模板配置
+	MonthTemplate    ReportTemplateConfig `mapstructure:"month_template"`     // 月报模板配置
+	YearTemplate     ReportTemplateConfig `mapstructure:"year_template"`      // 年报模板配置
 }
 
 // ReportTemplateConfig 定义报告模板的配置，控制报告中各模块的显示
 type ReportTemplateConfig struct {
 	ShowSummary bool `mapstructure:"show_summary"` // 是否显示汇总统计
-	ShowGrowth  bool `mapstructure:"show_growth"`   // 是否显示用例增长趋势图
-	ShowError   bool `mapstructure:"show_error"`    // 是否显示错误率趋势图
-	ShowSlow    bool `mapstructure:"show_slow"`     // 是否显示慢接口排名
-	ShowAlert   bool `mapstructure:"show_alert"`    // 是否显示连续失败告警
+	ShowGrowth  bool `mapstructure:"show_growth"`  // 是否显示用例增长趋势图
+	ShowError   bool `mapstructure:"show_error"`   // 是否显示错误率趋势图
+	ShowSlow    bool `mapstructure:"show_slow"`    // 是否显示慢接口排名
+	ShowAlert   bool `mapstructure:"show_alert"`   // 是否显示连续失败告警
 }
 
 // AppConfig 存储全局配置实例
@@ -261,12 +263,14 @@ func applyTemplateDefaults(t *ReportTemplateConfig) {
 func watchConfig() {
 	viper.WatchConfig()
 	viper.OnConfigChange(func(e fsnotify.Event) {
-		log.Printf("[config] 检测到配置文件变化: %s", e.Name)
+		logger.Info("检测到配置文件变化",
+			zap.String("file", e.Name),
+			zap.String("op", e.Op.String()))
 
 		// 重新解析配置到临时结构体
 		var newCfg Config
 		if err := viper.Unmarshal(&newCfg); err != nil {
-			log.Printf("[config] 解析新配置失败，保持旧配置: %v", err)
+			logger.Error("解析新配置失败，保持旧配置", zap.Error(err))
 			return
 		}
 
@@ -284,7 +288,7 @@ func watchConfig() {
 		AppConfig = newCfg
 		configMu.Unlock()
 
-		log.Printf("[config] 配置热加载成功")
+		logger.Info("配置热加载成功")
 
 		// 通知所有注册的回调
 		callbackMu.Lock()
