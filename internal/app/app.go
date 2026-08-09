@@ -700,38 +700,42 @@ func correctAndRecordResults(results []testcase.TestResult, totalDuration time.D
 		}
 	}
 
-	if passedCount == 0 {
-		return
+	var overheadPerTest time.Duration
+	if passedCount > 0 {
+		overhead := totalDuration - actualSum
+		overheadPerTest = overhead / time.Duration(passedCount)
+
+		logger.Info("正在修正执行时间",
+			zap.Duration("total_duration", totalDuration),
+			zap.Duration("actual_sum", actualSum),
+			zap.Duration("overhead", overhead),
+			zap.Int("passed_count", passedCount),
+			zap.Duration("overhead_per_test", overheadPerTest))
 	}
 
-	overhead := totalDuration - actualSum
-	overheadPerTest := overhead / time.Duration(passedCount)
-
-	logger.Info("正在修正执行时间",
-		zap.Duration("total_duration", totalDuration),
-		zap.Duration("actual_sum", actualSum),
-		zap.Duration("overhead", overhead),
-		zap.Int("passed_count", passedCount),
-		zap.Duration("overhead_per_test", overheadPerTest))
-
 	for _, result := range results {
-		if result.Passed && !result.TestCase.Skip {
-			correctedDuration := result.Duration + overheadPerTest
-
-			go storage.RecordExecutionTime(
-				result.TestCase.ID,
-				result.TestCase.Desc,
-				result.TestCase.FileName,
-				vars.Replace(result.TestCase.URL),
-				correctedDuration,
-				true,
-			)
-
-			logger.Info("已记录修正后的执行时间",
-				zap.String("test_case_id", result.TestCase.ID),
-				zap.Duration("original_duration", result.Duration),
-				zap.Duration("corrected_duration", correctedDuration))
+		if result.TestCase.Skip {
+			continue
 		}
+
+		duration := result.Duration
+		if result.Passed && passedCount > 0 {
+			duration += overheadPerTest
+		}
+
+		go storage.RecordExecutionTime(
+			result.TestCase.ID,
+			result.TestCase.Desc,
+			result.TestCase.FileName,
+			vars.Replace(result.TestCase.URL),
+			duration,
+			result.Passed,
+		)
+
+		logger.Info("已记录执行结果",
+			zap.String("test_case_id", result.TestCase.ID),
+			zap.Bool("passed", result.Passed),
+			zap.Duration("duration", duration))
 	}
 }
 
