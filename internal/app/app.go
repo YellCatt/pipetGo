@@ -56,16 +56,6 @@ func NewAppContext() (context.Context, context.CancelFunc) {
 }
 
 func Init(ctx context.Context) {
-	initDirectories()
-	config.InitConfig()
-
-	logger.InitLogger(logger.LogConfig{
-		Level:    config.AppConfig.Log.Level,
-		Encoding: config.AppConfig.Log.Encoding,
-		Output:   config.AppConfig.Log.Output,
-	})
-	logger.Debug("logger 初始化完成")
-
 	vars.Set("base_url", config.AppConfig.Target.BaseURL)
 	logger.Debug("内置变量 base_url 已设置", zap.String("base_url", config.AppConfig.Target.BaseURL))
 
@@ -620,7 +610,7 @@ func formatDuration(d time.Duration) string {
 	}
 }
 
-func initDirectories() {
+func InitDirectories() {
 	directories := []string{
 		"./config",
 		"./logs",

@@ -128,42 +128,53 @@ func UpdateLevel(level string) {
 	Info("日志级别已动态更新", zap.String("level", level))
 }
 
+// l 返回当前 logger，若未初始化则回退到 zap 全局 logger
+func l() *zap.Logger {
+	if log != nil {
+		return log
+	}
+	return zap.L()
+}
+
 // Debug 记录调试级别日志
 func Debug(msg string, fields ...zap.Field) {
-	log.Debug(msg, fields...)
+	l().Debug(msg, fields...)
 }
 
 // Info 记录信息级别日志
 func Info(msg string, fields ...zap.Field) {
-	log.Info(msg, fields...)
+	l().Info(msg, fields...)
 }
 
 // Warn 记录警告级别日志
 func Warn(msg string, fields ...zap.Field) {
-	log.Warn(msg, fields...)
+	l().Warn(msg, fields...)
 }
 
 // Error 记录错误级别日志
 func Error(msg string, fields ...zap.Field) {
-	log.Error(msg, fields...)
+	l().Error(msg, fields...)
 }
 
 // DPanic 记录调试panic级别日志（仅在开发模式下panic）
 func DPanic(msg string, fields ...zap.Field) {
-	log.DPanic(msg, fields...)
+	l().DPanic(msg, fields...)
 }
 
 // Panic 记录panic级别日志（会触发panic）
 func Panic(msg string, fields ...zap.Field) {
-	log.Panic(msg, fields...)
+	l().Panic(msg, fields...)
 }
 
 // Fatal 记录致命级别日志（会调用os.Exit(1)）
 func Fatal(msg string, fields ...zap.Field) {
-	log.Fatal(msg, fields...)
+	l().Fatal(msg, fields...)
 }
 
 // Sync 刷新日志缓冲区
 func Sync() error {
+	if log == nil {
+		return zap.L().Sync()
+	}
 	return log.Sync()
 }
