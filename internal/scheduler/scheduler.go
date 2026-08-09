@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"pipetGo/internal/email"
 	"pipetGo/internal/logger"
 	"pipetGo/internal/reporting"
 	"pipetGo/internal/timeutil"
@@ -64,9 +64,9 @@ type Config struct {
 	YearShowAlert    bool
 }
 
-type TestRunner func()
+type TestRunner func(ctx context.Context)
 
-func Start(dataDir string, cfg Config, runner TestRunner) {
+func Start(ctx context.Context, dataDir string, cfg Config, runner TestRunner) {
 	hasReport := cfg.WeeklyEnabled || cfg.MonthlyEnabled || cfg.YearlyEnabled || cfg.DailyEnabled
 
 	if runner == nil {
@@ -90,8 +90,14 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
 
-			for range ticker.C {
-				checkAndSendReports(dataDir, cfg, sendHour, sendMinute)
+			for {
+				select {
+				case <-ticker.C:
+					checkAndSendReports(dataDir, cfg, sendHour, sendMinute)
+				case <-ctx.Done():
+					logger.Info("报告调度器已停止")
+					return
+				}
 			}
 		}()
 	}
@@ -109,18 +115,28 @@ func Start(dataDir string, cfg Config, runner TestRunner) {
 		interval := time.Duration(intervalMinutes) * time.Minute
 		logger.Info(fmt.Sprintf("测试调度器已启动，每 %d 分钟执行一次测试", intervalMinutes))
 
-		time.Sleep(interval)
+		select {
+		case <-time.After(interval):
+		case <-ctx.Done():
+			logger.Info("测试调度器已停止")
+			return
+		}
 
 		for {
 			cycleStart := timeutil.Now()
 			logger.Info("执行定时测试周期...")
-			runner()
+			runner(ctx)
 			elapsed := time.Since(cycleStart)
 
 			if elapsed < interval {
 				waitTime := interval - elapsed
 				logger.Info(fmt.Sprintf("测试周期完成，耗时 %v，等待 %v 后开始下一周期", elapsed.Round(time.Second), waitTime.Round(time.Second)))
-				time.Sleep(waitTime)
+				select {
+				case <-time.After(waitTime):
+				case <-ctx.Done():
+					logger.Info("测试调度器已停止")
+					return
+				}
 			} else {
 				logger.Info(fmt.Sprintf("测试周期完成，耗时 %v（超过间隔），立即开始下一周期", elapsed.Round(time.Second)))
 			}
@@ -208,7 +224,7 @@ func checkAndSendReports(dataDir string, cfg Config, sendHour, sendMinute int) {
 	if cfg.DailyEnabled && state.LastSentDaily != dayKey {
 		logger.Info("发送日报...")
 		dayTmpl := reporting.NewReportTemplate("日报", "本日", cfg.DayShowSummary, cfg.DayShowGrowth, cfg.DayShowError, cfg.DayShowSlow, cfg.DayShowAlert)
-		if err := email.SendDailyReportEmailWithTemplate(consecutiveFailN, topSlowN, dayTmpl); err != nil {
+		if err := reporting.SendDailyReportEmailWithTemplate(consecutiveFailN, topSlowN, dayTmpl); err != nil {
 			logger.Error("发送日报失败: " + err.Error())
 		} else {
 			state.LastSentDaily = dayKey
@@ -219,7 +235,7 @@ func checkAndSendReports(dataDir string, cfg Config, sendHour, sendMinute int) {
 	if weekday == 1 && cfg.WeeklyEnabled && state.LastSentWeekly != weekKey {
 		logger.Info("发送周报...")
 		weekTmpl := reporting.NewReportTemplate("周报", "本周", cfg.WeekShowSummary, cfg.WeekShowGrowth, cfg.WeekShowError, cfg.WeekShowSlow, cfg.WeekShowAlert)
-		if err := email.SendWeeklyReportEmailWithTemplate(consecutiveFailN, topSlowN, weekTmpl); err != nil {
+		if err := reporting.SendWeeklyReportEmailWithTemplate(consecutiveFailN, topSlowN, weekTmpl); err != nil {
 			logger.Error("发送周报失败: " + err.Error())
 		} else {
 			state.LastSentWeekly = weekKey
@@ -231,7 +247,7 @@ func checkAndSendReports(dataDir string, cfg Config, sendHour, sendMinute int) {
 	if dayOfMonth == 1 && cfg.MonthlyEnabled && state.LastSentMonthly != monthKey {
 		logger.Info("发送月报...")
 		monthTmpl := reporting.NewReportTemplate("月报", "本月", cfg.MonthShowSummary, cfg.MonthShowGrowth, cfg.MonthShowError, cfg.MonthShowSlow, cfg.MonthShowAlert)
-		if err := email.SendMonthlyReportEmailWithTemplate(consecutiveFailN, topSlowN, monthTmpl); err != nil {
+		if err := reporting.SendMonthlyReportEmailWithTemplate(consecutiveFailN, topSlowN, monthTmpl); err != nil {
 			logger.Error("发送月报失败: " + err.Error())
 		} else {
 			state.LastSentMonthly = monthKey
@@ -242,7 +258,7 @@ func checkAndSendReports(dataDir string, cfg Config, sendHour, sendMinute int) {
 	if dayOfMonth == 1 && now.Month() == time.January && cfg.YearlyEnabled && state.LastSentYearly != yearKey {
 		logger.Info("发送年报...")
 		yearTmpl := reporting.NewReportTemplate("年报", "本年", cfg.YearShowSummary, cfg.YearShowGrowth, cfg.YearShowError, cfg.YearShowSlow, cfg.YearShowAlert)
-		if err := email.SendYearlyReportEmailWithTemplate(consecutiveFailN, topSlowN, yearTmpl); err != nil {
+		if err := reporting.SendYearlyReportEmailWithTemplate(consecutiveFailN, topSlowN, yearTmpl); err != nil {
 			logger.Error("发送年报失败: " + err.Error())
 		} else {
 			state.LastSentYearly = yearKey

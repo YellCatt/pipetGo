@@ -2,8 +2,11 @@
 package reporting
 
 import (
+	"pipetGo/internal/logger"
 	"pipetGo/internal/storage"
 	"pipetGo/internal/timeutil"
+
+	"go.uber.org/zap"
 )
 
 // DayReport 表示日报内容
@@ -28,13 +31,18 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 
 	if len(stats) == 0 {
 		liveSummary, err := storage.GetDailySummaryFromExecutions(dateStr)
-		if err == nil && liveSummary != nil {
+		if err != nil {
+			logger.Warn("从执行记录实时计算当日汇总失败",
+				zap.String("date", dateStr),
+				zap.Error(err))
+		} else if liveSummary != nil {
 			stats = append(stats, *liveSummary)
 		}
 	}
 
 	slowCases, err := storage.GetCaseAverageDurations("desc")
 	if err != nil {
+		logger.Warn("获取慢接口排行失败，日报将不包含慢接口数据", zap.Error(err))
 		slowCases = nil
 	}
 	if topSlowN <= 0 {
@@ -46,6 +54,7 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 
 	alertCases, err := storage.GetConsecutiveFailures(consecutiveFailN)
 	if err != nil {
+		logger.Warn("获取连续失败告警失败，日报将不包含告警信息", zap.Error(err))
 		alertCases = nil
 	}
 

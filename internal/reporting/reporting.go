@@ -6,8 +6,11 @@ import (
 	"sort"
 	"strings"
 
+	"pipetGo/internal/logger"
 	"pipetGo/internal/storage"
 	"pipetGo/internal/timeutil"
+
+	"go.uber.org/zap"
 )
 
 // GenerateASCIIReport 生成综合ASCII报告（含进度条、百分比、耗时）
@@ -22,21 +25,32 @@ func GenerateASCIIReportWithTemplate(deviceName string, consecutiveFailN int, to
 	fromDate := now.AddDate(0, 0, -30).Format("2006-01-02")
 	toDate := now.Format("2006-01-02")
 
-	stats, _ := storage.GetDailySummaries(fromDate, toDate)
+	stats, err := storage.GetDailySummaries(fromDate, toDate)
+	if err != nil {
+		logger.Warn("获取每日汇总失败，报告可能缺少历史数据",
+			zap.String("from", fromDate),
+			zap.String("to", toDate),
+			zap.Error(err))
+	}
 
 	if len(stats) == 0 {
 		for d := fromDate; d <= toDate; d = nextDay(d) {
 			liveSummary, err := storage.GetDailySummaryFromExecutions(d)
-			if err == nil && liveSummary != nil {
+			if err != nil {
+				logger.Warn("从执行记录实时计算日汇总失败",
+					zap.String("date", d),
+					zap.Error(err))
+			} else if liveSummary != nil {
 				stats = append(stats, *liveSummary)
 			}
 		}
 	}
 
 	slowCases, err := storage.GetCaseAverageDurations("desc")
-	if err != nil || len(slowCases) == 0 {
+	if err != nil {
+		logger.Warn("获取慢接口排行失败，报告将不包含慢接口数据", zap.Error(err))
 		slowCases = nil
-	} else {
+	} else if len(slowCases) == 0 {
 		if topSlowN <= 0 {
 			topSlowN = 10
 		}
@@ -48,7 +62,11 @@ func GenerateASCIIReportWithTemplate(deviceName string, consecutiveFailN int, to
 	var alertCases []storage.ConsecutiveFailureInfo
 	if consecutiveFailN > 0 {
 		alerts, err := storage.GetConsecutiveFailures(consecutiveFailN)
-		if err == nil && len(alerts) > 0 {
+		if err != nil {
+			logger.Warn("获取连续失败告警失败，报告将不包含告警信息",
+				zap.Int("consecutive_fail_n", consecutiveFailN),
+				zap.Error(err))
+		} else if len(alerts) > 0 {
 			alertCases = alerts
 		}
 	}
@@ -60,6 +78,7 @@ func GenerateASCIIReportWithTemplate(deviceName string, consecutiveFailN int, to
 func GetCaseDurationList(topN int) []storage.CaseAvgDuration {
 	cases, err := storage.GetCaseAverageDurations("desc")
 	if err != nil {
+		logger.Warn("获取用例耗时列表失败", zap.Error(err))
 		return nil
 	}
 	if topN > 0 && len(cases) > topN {

@@ -4,6 +4,7 @@ package testcase
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -64,21 +65,25 @@ func findTestCaseByID(id string) *psv.TestCase {
 	return nil
 }
 
-func executePreConditions(preIDs []string) (TestResult, error) {
+func executePreConditions(ctx context.Context, preIDs []string) (TestResult, error) {
 	for _, preID := range preIDs {
+		if ctx.Err() != nil {
+			return TestResult{}, ctx.Err()
+		}
+
 		preTC := findTestCaseByID(preID)
 		if preTC == nil {
 			errMsg := fmt.Sprintf("前置条件测试用例未找到: %s", preID)
 			logger.Error(errMsg)
-			return TestResult{}, fmt.Errorf(errMsg)
+			return TestResult{}, fmt.Errorf("%s", errMsg)
 		}
 
 		fmt.Printf("[前置条件] 执行: %s - %s\n", preTC.ID, preTC.Desc)
-		preResult := ExecuteTestCase(*preTC)
+		preResult := ExecuteTestCaseWithContext(ctx, *preTC)
 		if !preResult.Passed {
 			errMsg := fmt.Sprintf("前置条件失败: %s - %s", preID, preResult.Error)
 			logger.Error(errMsg)
-			return preResult, fmt.Errorf(errMsg)
+			return preResult, fmt.Errorf("%s", errMsg)
 		}
 		fmt.Printf("[前置条件] ✅ 成功\n")
 	}
@@ -124,8 +129,13 @@ func isVariableUsed(varName string) bool {
 	})
 }
 
-func executePostConditions(postIDs []string) {
+func executePostConditions(ctx context.Context, postIDs []string) {
 	for _, postID := range postIDs {
+		if ctx.Err() != nil {
+			logger.Warn("后置条件执行被取消", zap.Error(ctx.Err()))
+			return
+		}
+
 		postTC := findTestCaseByID(postID)
 		if postTC == nil {
 			logger.Error(fmt.Sprintf("后置条件测试用例未找到: %s", postID))
@@ -133,7 +143,7 @@ func executePostConditions(postIDs []string) {
 		}
 
 		fmt.Printf("[后置条件] 执行: %s - %s\n", postTC.ID, postTC.Desc)
-		postResult := ExecuteTestCase(*postTC)
+		postResult := ExecuteTestCaseWithContext(ctx, *postTC)
 		if !postResult.Passed {
 			fmt.Printf("[后置条件] ❌ 失败: %s\n", postResult.Error)
 			logger.Warn(fmt.Sprintf("后置条件失败: %s - %s", postID, postResult.Error))
@@ -143,7 +153,7 @@ func executePostConditions(postIDs []string) {
 	}
 }
 
-func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) TestResult {
+func finishTestCase(ctx context.Context, tc psv.TestCase, result TestResult, startTime time.Time) TestResult {
 	result.EndTime = timeutil.Now()
 	result.Duration = result.EndTime.Sub(startTime)
 
@@ -158,12 +168,10 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 		}
 	}
 
-	// 执行后置条件（无论测试成功与否都会执行）
 	if len(tc.Post) > 0 {
-		executePostConditions(tc.Post)
+		executePostConditions(ctx, tc.Post)
 	}
 
-	// 清理当前测试用例提取的变量（默认清理，除非设置 keep_vars=true，或被其他用例作为前置条件依赖，或是全局前置/后置条件）
 	shouldCleanup := !tc.KeepVars && tc.Extract != "" && !isUsedAsPreCondition(tc.ID) && !IsSetupTestCase(tc)
 	logger.Info("变量清理决策", zap.String("test", tc.ID), zap.Bool("shouldCleanup", shouldCleanup), zap.Bool("KeepVars", tc.KeepVars), zap.String("Extract", tc.Extract), zap.Bool("isUsedAsPreCondition", isUsedAsPreCondition(tc.ID)), zap.Bool("IsSetupTestCase", IsSetupTestCase(tc)))
 	if shouldCleanup {
@@ -173,7 +181,6 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 			part = strings.TrimSpace(part)
 			if idx := strings.Index(part, "="); idx != -1 {
 				varName := strings.TrimSpace(part[:idx])
-				// 如果变量被其他测试用例引用，则不清理
 				if isVariableUsed(varName) {
 					logger.Info("变量被其他用例引用，跳过清理", zap.String("name", varName), zap.String("test", tc.ID))
 					continue
@@ -186,19 +193,35 @@ func finishTestCase(tc psv.TestCase, result TestResult, startTime time.Time) Tes
 		globalVarsMu.Unlock()
 	}
 
-	// 执行后延迟（如果设置了 delay_after_ms）
 	if tc.DelayAfterMs > 0 {
 		logger.Info("测试后等待", zap.String("id", tc.ID), zap.Int("delay_after_ms", tc.DelayAfterMs))
-		time.Sleep(time.Duration(tc.DelayAfterMs) * time.Millisecond)
+		delay := time.Duration(tc.DelayAfterMs) * time.Millisecond
+		if ctx != nil {
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				logger.Warn("测试后等待被取消", zap.String("id", tc.ID), zap.Error(ctx.Err()))
+			}
+		} else {
+			time.Sleep(delay)
+		}
 	}
 
 	return result
 }
 
-// ExecuteTestCase 执行单个测试用例
+// ExecuteTestCase 执行单个测试用例（使用 background context，保持向后兼容）
 // tc: 测试用例
 // 返回: 测试结果
 func ExecuteTestCase(tc psv.TestCase) TestResult {
+	return ExecuteTestCaseWithContext(context.Background(), tc)
+}
+
+// ExecuteTestCaseWithContext 执行单个测试用例（带 context）
+// ctx: 用于超时、取消
+// tc: 测试用例
+// 返回: 测试结果
+func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult {
 	startTime := timeutil.Now()
 
 	result := TestResult{
@@ -208,7 +231,6 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 
 	logger.Info("正在执行测试", zap.String("id", tc.ID), zap.String("desc", tc.Desc))
 
-	// 如果标记为跳过，直接返回通过
 	if tc.Skip {
 		logger.Info("跳过测试", zap.String("id", tc.ID))
 		result.Passed = true
@@ -218,11 +240,17 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		return result
 	}
 
-	// 执行前置条件（链式测试）
+	if ctx.Err() != nil {
+		result.Passed = false
+		result.Error = ctx.Err().Error()
+		result.EndTime = timeutil.Now()
+		result.Duration = result.EndTime.Sub(startTime)
+		return result
+	}
+
 	if len(tc.Pre) > 0 {
-		preResult, err := executePreConditions(tc.Pre)
+		preResult, err := executePreConditions(ctx, tc.Pre)
 		if err != nil {
-			// 根据失败模式决定是否继续执行
 			if tc.FailMode == "continue" {
 				fmt.Printf("[%s] [%s] %s ... 前置条件失败但继续执行: %s\n", timeutil.FormatDateTime(timeutil.Now()), tc.ID, tc.Desc, err.Error())
 			} else {
@@ -234,10 +262,9 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 				return result
 			}
 		}
-		_ = preResult // 忽略前置结果，继续执行当前测试
+		_ = preResult
 	}
 
-	// 变量替换：将 {{var}} 替换为实际值
 	logger.Info("变量替换前",
 		zap.String("URL", tc.URL),
 		zap.Any("Headers", tc.Headers),
@@ -259,7 +286,6 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		zap.String("processedJSON", processedJSON))
 	logger.Info("当前全局变量", zap.Any("vars", vars.GetAll()))
 
-	// 构建请求体（用于报告记录）
 	var requestBody string
 	if tc.JSON != "" {
 		requestBody = processedJSON
@@ -276,23 +302,19 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		requestBody = string(formJSON)
 	}
 
-	// 请求头转JSON（用于报告记录）
 	headersJSON, _ := json.Marshal(processedHeaders)
 	result.RequestHeaders = string(headersJSON)
 	result.RequestBody = requestBody
 
-	// 创建 HTTP 请求
-	req := httpclient.Client.R()
+	req := httpclient.NewRequestWithContext(ctx)
 	for k, v := range processedHeaders {
 		req.SetHeader(k, v)
 	}
 
-	// 设置 URL 参数
 	for k, v := range tc.Params {
 		req.SetQueryParam(k, vars.Replace(v))
 	}
 
-	// 处理表单数据（支持文件上传）
 	if hasFileField(tc.Form) {
 		formData := make(map[string]string)
 		for k, v := range tc.Form {
@@ -308,11 +330,9 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 			req.SetFormData(formData)
 		}
 	} else if tc.JSON != "" {
-		// JSON 请求体
 		req.SetHeader("Content-Type", "application/json")
 		req.SetBody(processedJSON)
 	} else if len(tc.Form) > 0 {
-		// 表单数据
 		formData := make(map[string]string)
 		for k, v := range tc.Form {
 			formData[k] = vars.Replace(v)
@@ -320,17 +340,14 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		req.SetHeader("Content-Type", "application/x-www-form-urlencoded")
 		req.SetFormData(formData)
 	} else if tc.Body != "" {
-		// 原始请求体
 		req.SetBody(processedBody)
 	} else if tc.Payload != "" {
-		// 兼容性字段
 		req.SetBody(vars.Replace(tc.Payload))
 	}
 
 	var resp *resty.Response
 	var err error
 
-	// 根据 HTTP 方法执行请求
 	switch tc.Method {
 	case http.MethodGet:
 		resp, err = req.Get(processedURL)
@@ -348,48 +365,45 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 		err = fmt.Errorf("不支持的 HTTP 方法: %s", tc.Method)
 	}
 
-	// 请求执行失败
 	if err != nil {
-		result.Error = err.Error()
+		if ctx.Err() != nil {
+			result.Error = "请求被取消或超时: " + err.Error()
+		} else {
+			result.Error = err.Error()
+		}
 		result.Passed = false
-		return finishTestCase(tc, result, startTime)
+		return finishTestCase(ctx, tc, result, startTime)
 	}
 
 	result.ResponseBody = cleaner.CompressResponseBody(string(resp.Body()))
 	result.ActualStatus = resp.StatusCode()
 
-	// 流式模式处理
 	if tc.StreamMode {
-		result = executeStreamAssert(tc, resp, startTime)
+		result = executeStreamAssertWithContext(ctx, tc, resp, startTime)
 	} else {
-		// 普通模式断言
 		if tc.ExpectedStatus > 0 && resp.StatusCode() != tc.ExpectedStatus {
 			result.Error = fmt.Sprintf("期望状态码 %d，实际 %d", tc.ExpectedStatus, resp.StatusCode())
 			result.Passed = false
-			return finishTestCase(tc, result, startTime)
+			return finishTestCase(ctx, tc, result, startTime)
 		}
 
-		// 正则表达式断言
 		if tc.BodyRegex != "" {
 			if ok, errMsg := assert.BodyRegexMatch(result.ResponseBody, tc.BodyRegex); !ok {
 				result.Error = errMsg
 				result.Passed = false
-				return finishTestCase(tc, result, startTime)
+				return finishTestCase(ctx, tc, result, startTime)
 			}
 		}
 
-		// JSON 响应体断言
 		if tc.ExpectedBody != "" {
 			if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), result.ResponseBody, tc.MatchMode); !ok {
 				result.Error = errMsg
 				result.Passed = false
-				return finishTestCase(tc, result, startTime)
+				return finishTestCase(ctx, tc, result, startTime)
 			}
 		}
-
 	}
 
-	// 提取变量（用于链式测试）
 	if tc.Extract != "" {
 		extractedVars, err := assert.ExtractVariables(result.ResponseBody, tc.Extract)
 		if err == nil {
@@ -399,16 +413,14 @@ func ExecuteTestCase(tc psv.TestCase) TestResult {
 				vars.Set(k, v)
 			}
 			globalVarsMu.Unlock()
-			// 记录提取的变量到结果中
 			extractedVarsJSON, _ := json.Marshal(extractedVars)
 			result.ExtractedVars = string(extractedVarsJSON)
 			logger.Info("已提取变量", zap.String("id", tc.ID), zap.Any("vars", extractedVars))
 		}
 	}
 
-	// 测试通过
 	result.Passed = true
-	return finishTestCase(tc, result, startTime)
+	return finishTestCase(ctx, tc, result, startTime)
 }
 
 // hasFileField 检查表单是否包含文件上传字段
@@ -423,12 +435,13 @@ func hasFileField(form map[string]string) bool {
 	return false
 }
 
-// executeStreamAssert 执行流式响应断言
+// executeStreamAssertWithContext 执行流式响应断言（带 context）
+// ctx: 用于超时、取消
 // tc: 测试用例
 // resp: HTTP 响应
 // startTime: 开始时间
 // 返回: 测试结果
-func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.Time) TestResult {
+func executeStreamAssertWithContext(ctx context.Context, tc psv.TestCase, resp *resty.Response, startTime time.Time) TestResult {
 	result := TestResult{
 		TestCase:  tc,
 		StartTime: startTime,
@@ -440,8 +453,15 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 	var aggregatedContent strings.Builder
 	chunkCount := 0
 
-	// 解析 SSE（Server-Sent Events）格式响应
 	for scanner.Scan() {
+		if ctx.Err() != nil {
+			result.Passed = false
+			result.Error = "流式处理被取消: " + ctx.Err().Error()
+			result.EndTime = timeutil.Now()
+			result.Duration = result.EndTime.Sub(startTime)
+			return result
+		}
+
 		line := scanner.Text()
 		if strings.HasPrefix(line, "data: ") {
 			data := strings.TrimPrefix(line, "data: ")
@@ -462,7 +482,6 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 		}
 	}
 
-	// 执行流式断言
 	if len(tc.StreamAssert) > 0 {
 		assertConfigs := make([]assert.StreamAssertConfig, len(tc.StreamAssert))
 		for i, sa := range tc.StreamAssert {
@@ -490,14 +509,11 @@ func executeStreamAssert(tc psv.TestCase, resp *resty.Response, startTime time.T
 			fmt.Printf("            Error: %s\n", result.Error)
 			return result
 		}
-
 	}
 
-	// 构建聚合结果
 	aggregatedResult := assert.BuildAggregatedResult(aggregatedContent.String(), chunkCount)
 	result.ResponseBody = cleaner.CompressResponseBody(aggregatedResult)
 
-	// JSON 响应体断言
 	if tc.ExpectedBody != "" {
 		if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), aggregatedResult, tc.MatchMode); !ok {
 			result.Error = errMsg

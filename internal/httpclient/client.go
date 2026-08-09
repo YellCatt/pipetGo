@@ -1,8 +1,9 @@
 // Package httpclient 提供 HTTP 客户端功能
-// 使用 resty 库封装 HTTP 请求，支持重试和超时配置
+// 使用 resty 库封装 HTTP 请求，支持重试、超时和 context 取消
 package httpclient
 
 import (
+	"context"
 	"crypto/tls"
 	"time"
 
@@ -20,16 +21,30 @@ func InitClient() {
 	cfg := config.GetConfig()
 
 	client := resty.New().
-		SetBaseURL(cfg.Target.BaseURL).                              // 设置 API 基础地址
-		SetTimeout(time.Duration(cfg.Target.Timeout) * time.Second). // 设置请求超时
-		SetRetryCount(3).                                            // 设置重试次数
-		SetRetryWaitTime(1 * time.Second).                           // 设置重试等待时间
-		SetRetryMaxWaitTime(5 * time.Second)                         // 设置最大重试等待时间
+		SetBaseURL(cfg.Target.BaseURL).
+		SetTimeout(time.Duration(cfg.Target.Timeout) * time.Second).
+		SetRetryCount(3).
+		SetRetryWaitTime(1 * time.Second).
+		SetRetryMaxWaitTime(5 * time.Second)
 
-	// 如果配置了跳过 TLS 验证
 	if cfg.HTTP.InsecureSkipVerify {
 		client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
 	}
 
 	Client = client
+}
+
+// NewRequestWithContext 创建带 context 的 HTTP 请求
+// ctx: 用于超时、取消
+// 返回: resty.Request
+func NewRequestWithContext(ctx context.Context) *resty.Request {
+	if Client == nil {
+		InitClient()
+	}
+	return Client.R().SetContext(ctx)
+}
+
+// NewRequest 创建 HTTP 请求（使用 background context）
+func NewRequest() *resty.Request {
+	return NewRequestWithContext(context.Background())
 }

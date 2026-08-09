@@ -2,8 +2,11 @@
 package reporting
 
 import (
+	"pipetGo/internal/logger"
 	"pipetGo/internal/storage"
 	"pipetGo/internal/timeutil"
+
+	"go.uber.org/zap"
 )
 
 // YearReport 表示年报内容
@@ -31,7 +34,11 @@ func GenerateYearReport(deviceName string, consecutiveFailN int, topSlowN int) (
 	if len(stats) == 0 {
 		for d := startDate; d <= endDate; d = nextDay(d) {
 			liveSummary, err := storage.GetDailySummaryFromExecutions(d)
-			if err == nil && liveSummary != nil {
+			if err != nil {
+				logger.Warn("从执行记录实时计算日汇总失败",
+					zap.String("date", d),
+					zap.Error(err))
+			} else if liveSummary != nil {
 				stats = append(stats, *liveSummary)
 			}
 		}
@@ -39,6 +46,7 @@ func GenerateYearReport(deviceName string, consecutiveFailN int, topSlowN int) (
 
 	slowCases, err := storage.GetCaseAverageDurations("desc")
 	if err != nil {
+		logger.Warn("获取慢接口排行失败，年报将不包含慢接口数据", zap.Error(err))
 		slowCases = nil
 	}
 	if topSlowN <= 0 {
@@ -50,6 +58,7 @@ func GenerateYearReport(deviceName string, consecutiveFailN int, topSlowN int) (
 
 	alertCases, err := storage.GetConsecutiveFailures(consecutiveFailN)
 	if err != nil {
+		logger.Warn("获取连续失败告警失败，年报将不包含告警信息", zap.Error(err))
 		alertCases = nil
 	}
 
