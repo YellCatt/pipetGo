@@ -26,6 +26,13 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 		return nil, err
 	}
 
+	if len(stats) == 0 {
+		liveSummary, err := storage.GetDailySummaryFromExecutions(dateStr)
+		if err == nil && liveSummary != nil {
+			stats = append(stats, *liveSummary)
+		}
+	}
+
 	slowCases, err := storage.GetCaseAverageDurations("desc")
 	if err != nil {
 		slowCases = nil

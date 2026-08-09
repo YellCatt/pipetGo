@@ -33,6 +33,15 @@ func GenerateWeekReport(deviceName string, consecutiveFailN int, topSlowN int) (
 		return nil, err
 	}
 
+	if len(stats) == 0 {
+		for d := startDate; d <= endDate; d = nextDay(d) {
+			liveSummary, err := storage.GetDailySummaryFromExecutions(d)
+			if err == nil && liveSummary != nil {
+				stats = append(stats, *liveSummary)
+			}
+		}
+	}
+
 	slowCases, err := storage.GetCaseAverageDurations("desc")
 	if err != nil {
 		slowCases = nil

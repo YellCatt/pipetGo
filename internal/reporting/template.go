@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"pipetGo/internal/storage"
 )
@@ -195,6 +196,26 @@ func renderErrorRateChart(stats []storage.DailySummary) string {
 	return sb.String()
 }
 
+// truncateDesc 截断描述到指定显示宽度（中文字符算2列）
+func truncateDesc(s string, maxWidth int) string {
+	runes := []rune(s)
+	width := 0
+	for i, r := range runes {
+		w := 1
+		if r > 127 {
+			w = 2
+		}
+		if width+w > maxWidth {
+			if i > 0 {
+				return string(runes[:i]) + "..."
+			}
+			return string(runes[:i]) + "..."
+		}
+		width += w
+	}
+	return s
+}
+
 // renderSlowCases 渲染慢接口排名（ASCII 进度条）
 func renderSlowCases(cases []storage.CaseAvgDuration) string {
 	if len(cases) == 0 {
@@ -207,8 +228,17 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 		maxDur = 1
 	}
 
-	sb.WriteString(fmt.Sprintf("  %-5s %-40s %10s %8s %s\n", "排名", "接口", "平均耗时", "执行次数", "耗时占比"))
-	sb.WriteString("  " + strings.Repeat("-", 66) + "\n")
+	idWidth := 18
+	descWidth := 30
+
+	sb.WriteString(fmt.Sprintf("  %-4s %s %s %s %s %s\n",
+		"排名",
+		padRight("用例ID", idWidth),
+		padRight("描述", descWidth),
+		padRight("平均耗时", 10),
+		padRight("执行次数", 8),
+		"耗时占比"))
+	sb.WriteString("  " + strings.Repeat("-", 90) + "\n")
 
 	var totalMs float64
 	for _, c := range cases {
@@ -218,6 +248,9 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 	for i, c := range cases {
 		ratio := c.AverageDurationMs / maxDur
 		barLen := int(ratio * float64(barWidth))
+		if barLen > barWidth {
+			barLen = barWidth
+		}
 		bar := strings.Repeat("█", barLen)
 		space := strings.Repeat("░", barWidth-barLen)
 
@@ -233,17 +266,20 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 		if desc == "" {
 			desc = c.TestCaseID
 		}
-		if len(desc) > 38 {
-			desc = desc[:35] + "..."
-		}
+		desc = truncateDesc(desc, descWidth)
 
 		share := 0.0
 		if totalMs > 0 {
 			share = c.AverageDurationMs * float64(c.ExecutionCount) / totalMs * 100
 		}
 
-		sb.WriteString(fmt.Sprintf("  #%-4d %-40s %8s %6d  %s%s %5.1f%%\n",
-			i+1, desc, timeStr, c.ExecutionCount, bar, space, share))
+		sb.WriteString(fmt.Sprintf("  #%-3d %s %s %s %s %s%s %5.1f%%\n",
+			i+1,
+			padRight(c.TestCaseID, idWidth),
+			padRight(desc, descWidth),
+			padRight(timeStr, 10),
+			padRight(fmt.Sprintf("%d", c.ExecutionCount), 8),
+			bar, space, share))
 	}
 
 	return sb.String()
@@ -251,18 +287,42 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 
 // renderAlertCases 渲染连续失败告警
 func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
+	if len(alerts) == 0 {
+		return "  (无连续失败告警)\n"
+	}
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("  以下用例连续 %d 轮失败，请重点关注:\n\n", len(alerts[0].RecentResults)))
-	sb.WriteString(fmt.Sprintf("  %-20s %-35s %s\n", "用例ID", "描述", "最近执行时间"))
-	sb.WriteString("  " + strings.Repeat("-", 68) + "\n")
+
+	idWidth := 18
+	descWidth := 30
+
+	sb.WriteString(fmt.Sprintf("  %s %s %s\n",
+		padRight("用例ID", idWidth),
+		padRight("描述", descWidth),
+		"最近执行时间"))
+	sb.WriteString("  " + strings.Repeat("-", 70) + "\n")
 
 	for _, a := range alerts {
 		desc := a.TestCaseDesc
-		if len(desc) > 33 {
-			desc = desc[:30] + "..."
+		if desc == "" {
+			desc = a.TestCaseID
 		}
-		sb.WriteString(fmt.Sprintf("  %-20s %-35s %s\n", a.TestCaseID, desc, a.LastExecuted))
+		desc = truncateDesc(desc, descWidth)
+		sb.WriteString(fmt.Sprintf("  %s %s %s\n",
+			padRight(a.TestCaseID, idWidth),
+			padRight(desc, descWidth),
+			a.LastExecuted))
 	}
 
 	return sb.String()
+}
+
+// nextDay 返回指定日期的下一天（格式：2006-01-02）
+func nextDay(dateStr string) string {
+	t, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return dateStr
+	}
+	return t.AddDate(0, 0, 1).Format("2006-01-02")
 }

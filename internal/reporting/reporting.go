@@ -24,6 +24,15 @@ func GenerateASCIIReportWithTemplate(deviceName string, consecutiveFailN int, to
 
 	stats, _ := storage.GetDailySummaries(fromDate, toDate)
 
+	if len(stats) == 0 {
+		for d := fromDate; d <= toDate; d = nextDay(d) {
+			liveSummary, err := storage.GetDailySummaryFromExecutions(d)
+			if err == nil && liveSummary != nil {
+				stats = append(stats, *liveSummary)
+			}
+		}
+	}
+
 	slowCases, err := storage.GetCaseAverageDurations("desc")
 	if err != nil || len(slowCases) == 0 {
 		slowCases = nil
@@ -65,9 +74,18 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 		return "(无数据)"
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%-5s %-20s %-30s %10s %8s %8s\n",
-		"排名", "用例ID", "描述", "平均耗时", "执行次数", "耗时占比"))
-	sb.WriteString(strings.Repeat("-", 85) + "\n")
+
+	idWidth := 18
+	descWidth := 30
+
+	sb.WriteString(fmt.Sprintf("%-4s %s %s %s %s %s\n",
+		"排名",
+		padRight("用例ID", idWidth),
+		padRight("描述", descWidth),
+		padRight("平均耗时", 10),
+		padRight("执行次数", 8),
+		"耗时占比"))
+	sb.WriteString(strings.Repeat("-", 90) + "\n")
 
 	var totalMs float64
 	for _, c := range cases {
@@ -83,15 +101,21 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 			timeStr = fmt.Sprintf("%.0fms", ms)
 		}
 		desc := c.TestCaseDesc
-		if len(desc) > 28 {
-			desc = desc[:25] + "..."
+		if desc == "" {
+			desc = c.TestCaseID
 		}
+		desc = truncateDesc(desc, descWidth)
 		share := 0.0
 		if totalMs > 0 {
 			share = c.AverageDurationMs * float64(c.ExecutionCount) / totalMs * 100
 		}
-		sb.WriteString(fmt.Sprintf("%-5d %-20s %-30s %10s %8d %7.1f%%\n",
-			i+1, c.TestCaseID, desc, timeStr, c.ExecutionCount, share))
+		sb.WriteString(fmt.Sprintf("#%-3d %s %s %s %s %5.1f%%\n",
+			i+1,
+			padRight(c.TestCaseID, idWidth),
+			padRight(desc, descWidth),
+			padRight(timeStr, 10),
+			padRight(fmt.Sprintf("%d", c.ExecutionCount), 8),
+			share))
 	}
 	return sb.String()
 }

@@ -571,6 +571,68 @@ func countUniqueCaseIDsOnDate(date string) (int, error) {
 	return len(seen), nil
 }
 
+// GetDailySummaryFromExecutions 从执行记录实时计算指定日期的汇总
+func GetDailySummaryFromExecutions(date string) (*DailySummary, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if dataDir == "" {
+		return nil, fmt.Errorf("storage not initialized")
+	}
+
+	_, records, err := readRecords(executionCSVPath())
+	if err != nil {
+		return nil, err
+	}
+
+	var total, passed, failed, skipped int
+	var totalDurationMs int64
+	uniqueCases := make(map[string]bool)
+
+	for _, rec := range records {
+		if len(rec) < 7 {
+			continue
+		}
+		executedAt := strings.TrimSpace(rec[6])
+		if !strings.HasPrefix(executedAt, date) {
+			continue
+		}
+
+		uniqueCases[rec[0]] = true
+		durationMs := parseInt64(rec[4])
+		success := parseSuccess(rec[5])
+
+		total++
+		totalDurationMs += durationMs
+		if success {
+			passed++
+		} else {
+			failed++
+		}
+	}
+
+	if total == 0 {
+		return nil, nil
+	}
+
+	errorRate := 0.0
+	if total > 0 {
+		errorRate = float64(failed) / float64(total) * 100
+	}
+
+	summary := &DailySummary{
+		Date:            date,
+		Total:           total,
+		Passed:          passed,
+		Failed:          failed,
+		Skipped:         skipped,
+		ErrorRate:       errorRate,
+		TotalDurationMs: totalDurationMs,
+		UniqueCases:     len(uniqueCases),
+	}
+	return summary, nil
+}
+
 // GetDailySummaries 获取指定时间范围内的每日汇总
 func GetDailySummaries(fromDate, toDate string) ([]DailySummary, error) {
 	mu.RLock()
