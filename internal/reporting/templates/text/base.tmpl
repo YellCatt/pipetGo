@@ -1,61 +1,44 @@
-{{/* 报告公共基础模板 - 移动端邮件友好 */}}
+{{/* 报告公共基础模板 - 移动端紧凑友好 */}}
 
 {{/* 报告头部 */}}
 {{define "header"}}
-━━━━━━━━━━━━━━━━━━━━━━━━
-  pipetGo {{.ReportType}} ({{.StartDate}} ~ {{.EndDate}})
-━━━━━━━━━━━━━━━━━━━━━━━━
-设备: {{.DeviceName}}
-时间: {{.GeneratedAt}}
+pipetGo {{.ReportType}} ({{.StartDate}} ~ {{.EndDate}})
+设备: {{.DeviceName}}  时间: {{.GeneratedAt}}
 {{end}}
 
 {{/* 汇总统计 */}}
 {{define "summary"}}
-────────────────────────
-  {{.PeriodLabel}}汇总
-────────────────────────
-总执行 {{.Total}}   通过 {{.Passed}}   失败 {{.Failed}}   跳过 {{.Skipped}}
-通过率 {{printf "%.1f" .PassRate}}%   耗时 {{.TotalDuration}}
+{{.PeriodLabel}}汇总 {{.Total}}执行/{{.Passed}}通过/{{.Failed}}失败/{{.Skipped}}跳过 | {{printf "%.1f" .PassRate}}% | {{.TotalDuration}}
 [{{.PassBar}}{{.PassSpace}}] {{printf "%.1f" .PassRate}}%
 {{end}}
 
 {{/* 用例增长趋势图 */}}
 {{define "growth_chart"}}
-────────────────────────
-  用例增长趋势
-────────────────────────
+用例增长趋势
 {{.GrowthChart}}
 {{end}}
 
 {{/* 错误率趋势图 */}}
 {{define "error_chart"}}
-────────────────────────
-  错误率趋势
-────────────────────────
+错误率趋势
 {{.ErrorChart}}
 {{end}}
 
 {{/* 慢接口排名 */}}
 {{define "slow_cases"}}
-────────────────────────
-  慢接口 TOP {{.SlowCount}}
-────────────────────────
+慢接口 TOP {{.SlowCount}}
 {{.SlowChart}}
 {{end}}
 
 {{/* 连续失败告警 */}}
 {{define "alert_cases"}}
-────────────────────────
-  连续失败告警
-────────────────────────
+连续失败告警
 {{.AlertChart}}
 {{end}}
 
 {{/* 报告尾部 */}}
 {{define "footer"}}
-━━━━━━━━━━━━━━━━━━━━━━━━
- pipetGo 自动生成
-━━━━━━━━━━━━━━━━━━━━━━━━
+pipetGo 自动生成
 {{end}}
 
 {{/* 报告主体 */}}
