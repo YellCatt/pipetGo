@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	barWidth = 40
+	barWidth  = 40
+	TrendDays = 7 // 趋势图展示最近N天数据
 )
 
 // ReportTemplate 定义报告模板，控制报告中各模块的显示与顺序
@@ -107,14 +108,16 @@ func NewReportTemplate(reportType, periodLabel string, showSummary, showGrowth, 
 }
 
 // formatReportText 使用模板格式化报告为纯文本
-func formatReportText(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
-	data := BuildReportData(tmpl, startDate, endDate, deviceName, dailyStats, slowCases, alertCases)
+// dailyStats 用于汇总统计, trendStats 用于趋势图（为空时使用 dailyStats）
+func formatReportText(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, trendStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
+	data := BuildReportData(tmpl, startDate, endDate, deviceName, dailyStats, trendStats, slowCases, alertCases)
 	return MustRenderText(tmplNameFromType(tmpl.ReportType), data)
 }
 
 // formatReportHTML 邮件用纯文本报告（移动端友好）
-func formatReportHTML(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
-	data := BuildReportData(tmpl, startDate, endDate, deviceName, dailyStats, slowCases, alertCases)
+// dailyStats 用于汇总统计, trendStats 用于趋势图（为空时使用 dailyStats）
+func formatReportHTML(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, trendStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
+	data := BuildReportData(tmpl, startDate, endDate, deviceName, dailyStats, trendStats, slowCases, alertCases)
 	text := MustRenderText(tmplNameFromType(tmpl.ReportType), data)
 	return "<pre style=\"font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word;\">" + text + "</pre>"
 }
@@ -196,16 +199,20 @@ func renderErrorRateChart(stats []storage.DailySummary) string {
 	return sb.String()
 }
 
-// truncateDesc 截断描述到指定显示宽度（中文字符算2列）
+// truncateDesc 截断描述到指定显示宽度（中文字符算2列），超出部分用"..."替代
 func truncateDesc(s string, maxWidth int) string {
+	if maxWidth <= 3 {
+		return s
+	}
 	runes := []rune(s)
 	width := 0
+	limit := maxWidth - 3 // 预留"..."的宽度
 	for i, r := range runes {
 		w := 1
 		if r > 127 {
 			w = 2
 		}
-		if width+w > maxWidth {
+		if width+w > limit {
 			if i > 0 {
 				return string(runes[:i]) + "..."
 			}
@@ -230,15 +237,20 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 
 	idWidth := 18
 	descWidth := 30
+	timeWidth := 10
+	countWidth := 8
+	// 分隔线宽度 = 前缀 + 排名 + 各列 + 分隔空格 + 进度条 + 占比
+	// 前缀"  " + "#" + "%-3d"=6, 各列间各1空格, 进度条=barWidth, 占比=" %5.1f%%"=7
+	sepWidth := 6 + 1 + idWidth + 1 + descWidth + 1 + timeWidth + 1 + countWidth + 1 + barWidth + 7
 
 	sb.WriteString(fmt.Sprintf("  %-4s %s %s %s %s %s\n",
 		"排名",
 		padRight("用例ID", idWidth),
 		padRight("描述", descWidth),
-		padRight("平均耗时", 10),
-		padRight("执行次数", 8),
+		padRight("平均耗时", timeWidth),
+		padRight("执行次数", countWidth),
 		"耗时占比"))
-	sb.WriteString("  " + strings.Repeat("-", 90) + "\n")
+	sb.WriteString("  " + strings.Repeat("-", sepWidth) + "\n")
 
 	var totalMs float64
 	for _, c := range cases {
@@ -275,10 +287,10 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 
 		sb.WriteString(fmt.Sprintf("  #%-3d %s %s %s %s %s%s %5.1f%%\n",
 			i+1,
-			padRight(c.TestCaseID, idWidth),
+			padRight(truncateDesc(c.TestCaseID, idWidth), idWidth),
 			padRight(desc, descWidth),
-			padRight(timeStr, 10),
-			padRight(fmt.Sprintf("%d", c.ExecutionCount), 8),
+			padRight(timeStr, timeWidth),
+			padRight(fmt.Sprintf("%d", c.ExecutionCount), countWidth),
 			bar, space, share))
 	}
 
@@ -296,12 +308,13 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 
 	idWidth := 18
 	descWidth := 30
+	timeWidth := 19 // "最近执行时间" 视觉宽度
 
 	sb.WriteString(fmt.Sprintf("  %s %s %s\n",
 		padRight("用例ID", idWidth),
 		padRight("描述", descWidth),
 		"最近执行时间"))
-	sb.WriteString("  " + strings.Repeat("-", 70) + "\n")
+	sb.WriteString("  " + strings.Repeat("-", idWidth+1+descWidth+1+timeWidth) + "\n")
 
 	for _, a := range alerts {
 		desc := a.TestCaseDesc
@@ -310,7 +323,7 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 		}
 		desc = truncateDesc(desc, descWidth)
 		sb.WriteString(fmt.Sprintf("  %s %s %s\n",
-			padRight(a.TestCaseID, idWidth),
+			padRight(truncateDesc(a.TestCaseID, idWidth), idWidth),
 			padRight(desc, descWidth),
 			a.LastExecuted))
 	}

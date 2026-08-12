@@ -85,10 +85,10 @@ func GenerateYearReportWithTemplate(deviceName string, consecutiveFailN int, top
 
 // FormatYearReport 格式化年报为纯文本
 func (r *YearReport) FormatYearReport() string {
-	return formatReportText(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+	return formatReportText(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, nil, r.SlowCases, r.AlertCases)
 }
 
 // FormatYearReportHTML 格式化年报为HTML（用于邮件）
 func (r *YearReport) FormatYearReportHTML() string {
-	return formatReportHTML(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+	return formatReportHTML(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, nil, r.SlowCases, r.AlertCases)
 }

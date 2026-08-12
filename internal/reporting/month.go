@@ -85,10 +85,10 @@ func GenerateMonthReportWithTemplate(deviceName string, consecutiveFailN int, to
 
 // FormatMonthReport 格式化月报为纯文本
 func (r *MonthReport) FormatMonthReport() string {
-	return formatReportText(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+	return formatReportText(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, nil, r.SlowCases, r.AlertCases)
 }
 
 // FormatMonthReportHTML 格式化月报为HTML（用于邮件）
 func (r *MonthReport) FormatMonthReportHTML() string {
-	return formatReportHTML(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+	return formatReportHTML(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, nil, r.SlowCases, r.AlertCases)
 }

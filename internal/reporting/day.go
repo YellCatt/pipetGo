@@ -12,7 +12,8 @@ import (
 // DayReport 表示日报内容
 type DayReport struct {
 	Date       string
-	DailyStats []storage.DailySummary
+	DailyStats []storage.DailySummary // 当日汇总数据
+	TrendStats []storage.DailySummary // 近N天趋势数据（用于趋势图）
 	SlowCases  []storage.CaseAvgDuration
 	AlertCases []storage.ConsecutiveFailureInfo
 	DeviceName string
@@ -24,6 +25,7 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 	now := timeutil.Now()
 	dateStr := now.Format("2006-01-02")
 
+	// 当日汇总数据
 	stats, err := storage.GetDailySummaries(dateStr, dateStr)
 	if err != nil {
 		return nil, err
@@ -38,6 +40,20 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 		} else if liveSummary != nil {
 			stats = append(stats, *liveSummary)
 		}
+	}
+
+	// 近N天趋势数据（用于趋势图）
+	trendFrom := now.AddDate(0, 0, -(TrendDays - 1)).Format("2006-01-02")
+	trendStats, err := storage.GetDailySummaries(trendFrom, dateStr)
+	if err != nil {
+		logger.Warn("获取趋势数据失败，趋势图将仅显示当日数据",
+			zap.String("from", trendFrom),
+			zap.String("to", dateStr),
+			zap.Error(err))
+		trendStats = stats
+	}
+	if len(trendStats) == 0 {
+		trendStats = stats
 	}
 
 	slowCases, err := storage.GetCaseAverageDurations("desc")
@@ -61,6 +77,7 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 	return &DayReport{
 		Date:       dateStr,
 		DailyStats: stats,
+		TrendStats: trendStats,
 		SlowCases:  slowCases,
 		AlertCases: alertCases,
 		DeviceName: deviceName,
@@ -80,10 +97,10 @@ func GenerateDayReportWithTemplate(deviceName string, consecutiveFailN int, topS
 
 // FormatDayReport 格式化日报为纯文本
 func (r *DayReport) FormatDayReport() string {
-	return formatReportText(r.Template, r.Date, r.Date, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+	return formatReportText(r.Template, r.Date, r.Date, r.DeviceName, r.DailyStats, r.TrendStats, r.SlowCases, r.AlertCases)
 }
 
 // FormatDayReportHTML 格式化日报为HTML（用于邮件）
 func (r *DayReport) FormatDayReportHTML() string {
-	return formatReportHTML(r.Template, r.Date, r.Date, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+	return formatReportHTML(r.Template, r.Date, r.Date, r.DeviceName, r.DailyStats, r.TrendStats, r.SlowCases, r.AlertCases)
 }

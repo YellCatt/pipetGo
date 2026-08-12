@@ -197,7 +197,8 @@ type ReportData struct {
 }
 
 // BuildReportData 从模板配置和数据构建 ReportData
-func BuildReportData(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) ReportData {
+// dailyStats 用于汇总统计, trendStats 用于趋势图（为空时回退到 dailyStats）
+func BuildReportData(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, trendStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) ReportData {
 	data := ReportData{
 		ReportType:  tmpl.ReportType,
 		PeriodLabel: tmpl.PeriodLabel,
@@ -213,7 +214,7 @@ func BuildReportData(tmpl ReportTemplate, startDate, endDate, deviceName string,
 		ShowAlert:   tmpl.ShowAlert,
 	}
 
-	// 汇总统计
+	// 汇总统计：仅使用 dailyStats（当日/当周/当月汇总）
 	if len(dailyStats) > 0 {
 		var totalDur time.Duration
 		for _, d := range dailyStats {
@@ -233,14 +234,20 @@ func BuildReportData(tmpl ReportTemplate, startDate, endDate, deviceName string,
 		data.PassSpace = strings.Repeat("░", barWidth-barLen)
 	}
 
+	// 趋势图：优先使用 trendStats，为空时回退到 dailyStats
+	chartStats := trendStats
+	if len(chartStats) == 0 {
+		chartStats = dailyStats
+	}
+
 	// 用例增长趋势图
 	if data.ShowGrowth {
-		data.GrowthChart = renderCaseGrowthChart(dailyStats)
+		data.GrowthChart = renderCaseGrowthChart(chartStats)
 	}
 
 	// 错误率趋势图
 	if data.ShowError {
-		data.ErrorChart = renderErrorRateChart(dailyStats)
+		data.ErrorChart = renderErrorRateChart(chartStats)
 	}
 
 	// 慢接口排名

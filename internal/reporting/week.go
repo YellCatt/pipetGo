@@ -90,10 +90,10 @@ func GenerateWeekReportWithTemplate(deviceName string, consecutiveFailN int, top
 
 // FormatWeekReport 格式化周报为纯文本
 func (r *WeekReport) FormatWeekReport() string {
-	return formatReportText(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+	return formatReportText(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, nil, r.SlowCases, r.AlertCases)
 }
 
 // FormatWeekReportHTML 格式化周报为HTML（用于邮件）
 func (r *WeekReport) FormatWeekReportHTML() string {
-	return formatReportHTML(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, r.SlowCases, r.AlertCases)
+	return formatReportHTML(r.Template, r.StartDate, r.EndDate, r.DeviceName, r.DailyStats, nil, r.SlowCases, r.AlertCases)
 }

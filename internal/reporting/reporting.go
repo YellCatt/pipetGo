@@ -71,7 +71,7 @@ func GenerateASCIIReportWithTemplate(deviceName string, consecutiveFailN int, to
 		}
 	}
 
-	return formatReportText(tmpl, fromDate, toDate, deviceName, stats, slowCases, alertCases)
+	return formatReportText(tmpl, fromDate, toDate, deviceName, stats, nil, slowCases, alertCases)
 }
 
 // GetCaseDurationList 获取所有用例耗时列表（按耗时降序）
@@ -96,15 +96,20 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 
 	idWidth := 18
 	descWidth := 30
+	timeWidth := 10
+	countWidth := 8
+	// 分隔线宽度 = 排名 + 各列 + 分隔空格 + 占比
+	// "#%-3d"=4, 各列间各1空格, 占比=" %5.1f%%"=7
+	sepWidth := 4 + 1 + idWidth + 1 + descWidth + 1 + timeWidth + 1 + countWidth + 7
 
 	sb.WriteString(fmt.Sprintf("%-4s %s %s %s %s %s\n",
 		"排名",
 		padRight("用例ID", idWidth),
 		padRight("描述", descWidth),
-		padRight("平均耗时", 10),
-		padRight("执行次数", 8),
+		padRight("平均耗时", timeWidth),
+		padRight("执行次数", countWidth),
 		"耗时占比"))
-	sb.WriteString(strings.Repeat("-", 90) + "\n")
+	sb.WriteString(strings.Repeat("-", sepWidth) + "\n")
 
 	var totalMs float64
 	for _, c := range cases {
@@ -130,10 +135,10 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 		}
 		sb.WriteString(fmt.Sprintf("#%-3d %s %s %s %s %5.1f%%\n",
 			i+1,
-			padRight(c.TestCaseID, idWidth),
+			padRight(truncateDesc(c.TestCaseID, idWidth), idWidth),
 			padRight(desc, descWidth),
-			padRight(timeStr, 10),
-			padRight(fmt.Sprintf("%d", c.ExecutionCount), 8),
+			padRight(timeStr, timeWidth),
+			padRight(fmt.Sprintf("%d", c.ExecutionCount), countWidth),
 			share))
 	}
 	return sb.String()
