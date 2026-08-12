@@ -493,7 +493,7 @@ func executeStreamAssertWithContext(ctx context.Context, tc psv.TestCase, resp *
 			}
 		}
 
-		if ok, errMsg := assert.StreamAssert(aggregatedContent.String(), chunkCount, assertConfigs); ok {
+		if ok, errMsg := assert.StreamAssert(cleaner.CompressResponseBody(aggregatedContent.String()), chunkCount, assertConfigs); ok {
 			result.Passed = true
 			result.EndTime = timeutil.Now()
 			result.Duration = result.EndTime.Sub(startTime)
@@ -515,7 +515,7 @@ func executeStreamAssertWithContext(ctx context.Context, tc psv.TestCase, resp *
 	result.ResponseBody = cleaner.CompressResponseBody(aggregatedResult)
 
 	if tc.ExpectedBody != "" {
-		if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), aggregatedResult, tc.MatchMode); !ok {
+		if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), result.ResponseBody, tc.MatchMode); !ok {
 			result.Error = errMsg
 			result.Passed = false
 			result.EndTime = timeutil.Now()
@@ -523,6 +523,21 @@ func executeStreamAssertWithContext(ctx context.Context, tc psv.TestCase, resp *
 			fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 			fmt.Printf("            Error: %s\n", result.Error)
 			return result
+		}
+	}
+
+	if tc.Extract != "" {
+		extractedVars, err := assert.ExtractVariables(result.ResponseBody, tc.Extract)
+		if err == nil {
+			globalVarsMu.Lock()
+			for k, v := range extractedVars {
+				globalVars[k] = v
+				vars.Set(k, v)
+			}
+			globalVarsMu.Unlock()
+			extractedVarsJSON, _ := json.Marshal(extractedVars)
+			result.ExtractedVars = string(extractedVarsJSON)
+			logger.Info("已提取变量", zap.String("id", tc.ID), zap.Any("vars", extractedVars))
 		}
 	}
 
