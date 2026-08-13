@@ -229,69 +229,100 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 		return "  (无数据)\n"
 	}
 
-	var sb strings.Builder
 	maxDur := cases[0].AverageDurationMs
 	if maxDur <= 0 {
 		maxDur = 1
 	}
 
-	idWidth := 18
-	descWidth := 30
-	timeWidth := 10
-	countWidth := 8
-	// 分隔线宽度 = 前缀 + 排名 + 各列 + 分隔空格 + 进度条 + 占比
-	// 前缀"  " + "#" + "%-3d"=6, 各列间各1空格, 进度条=barWidth, 占比=" %5.1f%%"=7
-	sepWidth := 6 + 1 + idWidth + 1 + descWidth + 1 + timeWidth + 1 + countWidth + 1 + barWidth + 7
+	type slowRow struct {
+		id       string
+		desc     string
+		timeStr  string
+		countStr string
+		barLen   int
+		share    float64
+	}
 
-	sb.WriteString(fmt.Sprintf("  %-4s %s %s %s %s %s\n",
-		"排名",
-		padRight("用例ID", idWidth),
-		padRight("描述", descWidth),
-		padRight("平均耗时", timeWidth),
-		padRight("执行次数", countWidth),
-		"耗时占比"))
-	sb.WriteString("  " + strings.Repeat("-", sepWidth) + "\n")
-
+	rows := make([]slowRow, len(cases))
 	var totalMs float64
 	for _, c := range cases {
 		totalMs += c.AverageDurationMs * float64(c.ExecutionCount)
 	}
 
 	for i, c := range cases {
-		ratio := c.AverageDurationMs / maxDur
-		barLen := int(ratio * float64(barWidth))
-		if barLen > barWidth {
-			barLen = barWidth
-		}
-		bar := strings.Repeat("█", barLen)
-		space := strings.Repeat("░", barWidth-barLen)
-
-		var timeStr string
-		ms := c.AverageDurationMs
-		if ms >= 1000 {
-			timeStr = fmt.Sprintf("%.2fs", ms/1000)
-		} else {
-			timeStr = fmt.Sprintf("%.0fms", ms)
-		}
-
 		desc := c.TestCaseDesc
 		if desc == "" {
 			desc = c.TestCaseID
 		}
-		desc = truncateDesc(desc, descWidth)
+
+		var timeStr string
+		if c.AverageDurationMs >= 1000 {
+			timeStr = fmt.Sprintf("%.2fs", c.AverageDurationMs/1000)
+		} else {
+			timeStr = fmt.Sprintf("%.0fms", c.AverageDurationMs)
+		}
 
 		share := 0.0
 		if totalMs > 0 {
 			share = c.AverageDurationMs * float64(c.ExecutionCount) / totalMs * 100
 		}
 
-		sb.WriteString(fmt.Sprintf("  #%-3d %s %s %s %s %s%s %5.1f%%\n",
-			i+1,
-			padRight(truncateDesc(c.TestCaseID, idWidth), idWidth),
-			padRight(desc, descWidth),
-			padRight(timeStr, timeWidth),
-			padRight(fmt.Sprintf("%d", c.ExecutionCount), countWidth),
-			bar, space, share))
+		barLen := int(c.AverageDurationMs / maxDur * float64(barWidth))
+		if barLen > barWidth {
+			barLen = barWidth
+		}
+
+		rows[i] = slowRow{
+			id:       c.TestCaseID,
+			desc:     desc,
+			timeStr:  timeStr,
+			countStr: fmt.Sprintf("%d", c.ExecutionCount),
+			barLen:   barLen,
+			share:    share,
+		}
+	}
+
+	// 根据实际内容动态计算列宽，保证完整显示并对齐
+	rankW := max(displayWidth("排名"), 4)
+	idW := max(displayWidth("用例ID"), 4)
+	descW := max(displayWidth("描述"), 4)
+	timeW := max(displayWidth("平均耗时"), 4)
+	countW := max(displayWidth("执行次数"), 4)
+	shareW := max(displayWidth("耗时占比"), 7)
+
+	for _, r := range rows {
+		idW = max(idW, displayWidth(r.id))
+		descW = max(descW, displayWidth(r.desc))
+		timeW = max(timeW, displayWidth(r.timeStr))
+		countW = max(countW, displayWidth(r.countStr))
+	}
+
+	shareAreaW := barWidth + 1 + shareW
+	sepWidth := rankW + 1 + idW + 1 + descW + 1 + timeW + 1 + countW + 1 + shareAreaW
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("  %s %s %s %s %s %s\n",
+		padRight("排名", rankW),
+		padRight("用例ID", idW),
+		padRight("描述", descW),
+		padRight("平均耗时", timeW),
+		padRight("执行次数", countW),
+		padRight("耗时占比", shareAreaW)))
+	sb.WriteString("  " + strings.Repeat("-", sepWidth) + "\n")
+
+	for i, r := range rows {
+		bar := strings.Repeat("█", r.barLen)
+		space := strings.Repeat("░", barWidth-r.barLen)
+		shareStr := fmt.Sprintf("%6.1f%%", r.share)
+
+		sb.WriteString(fmt.Sprintf("  %s %s %s %s %s %s %s\n",
+			padRight(fmt.Sprintf("#%02d", i+1), rankW),
+			padRight(r.id, idW),
+			padRight(r.desc, descW),
+			padLeft(r.timeStr, timeW),
+			padLeft(r.countStr, countW),
+			bar+space,
+			padLeft(shareStr, shareW)))
 	}
 
 	return sb.String()

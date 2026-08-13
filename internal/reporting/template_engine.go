@@ -141,22 +141,35 @@ func BuildStartupStatsData(totalCount, chainCount, independentCount int, tags []
 	return data
 }
 
-// padRight 右填充到指定宽度（处理中文字符）
-func padRight(s string, width int) string {
-	runes := []rune(s)
-	actualWidth := 0
-	for _, r := range runes {
+// displayWidth 计算字符串在等宽字体下的显示宽度（中文字符按2列计算）
+func displayWidth(s string) int {
+	w := 0
+	for _, r := range s {
 		if r > 127 {
-			actualWidth += 2
+			w += 2
 		} else {
-			actualWidth++
+			w++
 		}
 	}
-	padLen := width - actualWidth
+	return w
+}
+
+// padRight 右填充到指定宽度（处理中文字符）
+func padRight(s string, width int) string {
+	padLen := width - displayWidth(s)
 	if padLen <= 0 {
 		padLen = 0
 	}
 	return s + strings.Repeat(" ", padLen)
+}
+
+// padLeft 左填充到指定宽度（处理中文字符）
+func padLeft(s string, width int) string {
+	padLen := width - displayWidth(s)
+	if padLen <= 0 {
+		padLen = 0
+	}
+	return strings.Repeat(" ", padLen) + s
 }
 
 // ============================================================================
