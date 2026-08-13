@@ -647,7 +647,7 @@ func GetDailySummaries(fromDate, toDate string) ([]DailySummary, error) {
 		return nil, err
 	}
 
-	var summaries []DailySummary
+	dateMap := make(map[string]DailySummary)
 	for _, rec := range records {
 		if len(rec) < 8 {
 			continue
@@ -659,7 +659,7 @@ func GetDailySummaries(fromDate, toDate string) ([]DailySummary, error) {
 		if toDate != "" && date > toDate {
 			continue
 		}
-		summaries = append(summaries, DailySummary{
+		dateMap[date] = DailySummary{
 			Date:            date,
 			Total:           int(parseInt64(rec[1])),
 			Passed:          int(parseInt64(rec[2])),
@@ -668,7 +668,12 @@ func GetDailySummaries(fromDate, toDate string) ([]DailySummary, error) {
 			ErrorRate:       parseFloat64(rec[5]),
 			TotalDurationMs: parseInt64(rec[6]),
 			UniqueCases:     int(parseInt64(rec[7])),
-		})
+		}
+	}
+
+	var summaries []DailySummary
+	for _, s := range dateMap {
+		summaries = append(summaries, s)
 	}
 
 	sort.Slice(summaries, func(i, j int) bool {
