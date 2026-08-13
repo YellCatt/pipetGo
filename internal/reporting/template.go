@@ -337,26 +337,48 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("  以下用例连续 %d 轮失败，请重点关注:\n\n", len(alerts[0].RecentResults)))
 
-	idWidth := 18
-	descWidth := 30
-	timeWidth := 19 // "最近执行时间" 视觉宽度
+	type alertRow struct {
+		id        string
+		desc      string
+		lastExec  string
+	}
 
-	sb.WriteString(fmt.Sprintf("  %s %s %s\n",
-		padRight("用例ID", idWidth),
-		padRight("描述", descWidth),
-		"最近执行时间"))
-	sb.WriteString("  " + strings.Repeat("-", idWidth+1+descWidth+1+timeWidth) + "\n")
-
-	for _, a := range alerts {
+	rows := make([]alertRow, len(alerts))
+	for i, a := range alerts {
 		desc := a.TestCaseDesc
 		if desc == "" {
 			desc = a.TestCaseID
 		}
-		desc = truncateDesc(desc, descWidth)
+		rows[i] = alertRow{
+			id:       a.TestCaseID,
+			desc:     desc,
+			lastExec: a.LastExecuted,
+		}
+	}
+
+	idW := max(displayWidth("用例ID"), 4)
+	descW := max(displayWidth("描述"), 4)
+	timeW := max(displayWidth("最近执行时间"), 4)
+
+	for _, r := range rows {
+		idW = max(idW, displayWidth(r.id))
+		descW = max(descW, displayWidth(r.desc))
+		timeW = max(timeW, displayWidth(r.lastExec))
+	}
+
+	sepWidth := idW + 1 + descW + 1 + timeW
+
+	sb.WriteString(fmt.Sprintf("  %s %s %s\n",
+		padRight("用例ID", idW),
+		padRight("描述", descW),
+		padRight("最近执行时间", timeW)))
+	sb.WriteString("  " + strings.Repeat("-", sepWidth) + "\n")
+
+	for _, r := range rows {
 		sb.WriteString(fmt.Sprintf("  %s %s %s\n",
-			padRight(truncateDesc(a.TestCaseID, idWidth), idWidth),
-			padRight(desc, descWidth),
-			a.LastExecuted))
+			padRight(r.id, idW),
+			padRight(r.desc, descW),
+			padRight(r.lastExec, timeW)))
 	}
 
 	return sb.String()
