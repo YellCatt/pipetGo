@@ -119,7 +119,7 @@ func formatReportText(tmpl ReportTemplate, startDate, endDate, deviceName string
 func formatReportHTML(tmpl ReportTemplate, startDate, endDate, deviceName string, dailyStats []storage.DailySummary, trendStats []storage.DailySummary, slowCases []storage.CaseAvgDuration, alertCases []storage.ConsecutiveFailureInfo) string {
 	data := BuildReportData(tmpl, startDate, endDate, deviceName, dailyStats, trendStats, slowCases, alertCases)
 	text := MustRenderText(tmplNameFromType(tmpl.ReportType), data)
-	return "<pre style=\"font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word;\">" + text + "</pre>"
+	return "<pre style=\"font-family: monospace, Consolas, 'Courier New', sans-serif; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word;\">" + text + "</pre>"
 }
 
 // tmplNameFromType 根据报告类型返回模板名称
@@ -334,21 +334,21 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 		return "  (无连续失败告警)\n"
 	}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("  以下用例连续 %d 轮失败，请重点关注:\n\n", len(alerts[0].RecentResults)))
-
 	type alertRow struct {
-		id        string
-		desc      string
-		lastExec  string
+		id       string
+		desc     string
+		lastExec string
 	}
 
+	const maxDescWidth = 30
 	rows := make([]alertRow, len(alerts))
 	for i, a := range alerts {
 		desc := a.TestCaseDesc
 		if desc == "" {
 			desc = a.TestCaseID
 		}
+		// 限制描述宽度，避免某个超长描述把表格撑得过宽
+		desc = truncateDesc(desc, maxDescWidth)
 		rows[i] = alertRow{
 			id:       a.TestCaseID,
 			desc:     desc,
@@ -356,6 +356,7 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 		}
 	}
 
+	// 根据实际内容动态计算列宽，保证表头与数据行对齐
 	idW := max(displayWidth("用例ID"), 4)
 	descW := max(displayWidth("描述"), 4)
 	timeW := max(displayWidth("最近执行时间"), 4)
@@ -368,6 +369,9 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 
 	sepWidth := idW + 1 + descW + 1 + timeW
 
+	var sb strings.Builder
+	// 说明文字与下方表格保持同样的 2 空格缩进，整体对齐
+	sb.WriteString(fmt.Sprintf("  以下用例连续 %d 轮失败，请重点关注:\n\n", len(alerts[0].RecentResults)))
 	sb.WriteString(fmt.Sprintf("  %s %s %s\n",
 		padRight("用例ID", idW),
 		padRight("描述", descW),
