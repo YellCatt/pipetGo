@@ -130,7 +130,7 @@ func (c *Cleaner) cleanup() error {
 	if c.config.LogDir != "" {
 		count, err := c.cleanupDirectory(c.config.LogDir, threshold)
 		if err != nil {
-			logger.Error("清理日志目录失败", zap.String("dir", c.config.LogDir), zap.Error(err))
+			logger.Error("清理日志目录失败", zap.String("目录", c.config.LogDir), zap.Error(err))
 		} else {
 			totalDeleted += count
 		}
@@ -140,7 +140,7 @@ func (c *Cleaner) cleanup() error {
 	if c.config.ReportDir != "" {
 		count, err := c.cleanupDirectory(c.config.ReportDir, threshold)
 		if err != nil {
-			logger.Error("清理报告目录失败", zap.String("dir", c.config.ReportDir), zap.Error(err))
+			logger.Error("清理报告目录失败", zap.String("目录", c.config.ReportDir), zap.Error(err))
 		} else {
 			totalDeleted += count
 		}
@@ -150,20 +150,20 @@ func (c *Cleaner) cleanup() error {
 	if c.config.DataDir != "" {
 		count, err := c.cleanupDirectory(c.config.DataDir, threshold)
 		if err != nil {
-			logger.Error("清理数据目录失败", zap.String("dir", c.config.DataDir), zap.Error(err))
+			logger.Error("清理数据目录失败", zap.String("目录", c.config.DataDir), zap.Error(err))
 		} else {
 			totalDeleted += count
 		}
 	}
 
-	logger.Info("清理任务完成", zap.Int("files_deleted", totalDeleted))
+	logger.Info("清理任务完成", zap.Int("删除文件数", totalDeleted))
 	return nil
 }
 
 // cleanupDirectory 清理指定目录中超过阈值时间的文件
 func (c *Cleaner) cleanupDirectory(dir string, threshold time.Time) (int, error) {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		logger.Debug("目录不存在，跳过", zap.String("dir", dir))
+		logger.Debug("目录不存在，跳过", zap.String("目录", dir))
 		return 0, nil
 	}
 
@@ -189,11 +189,11 @@ func (c *Cleaner) cleanupDirectory(dir string, threshold time.Time) (int, error)
 		// 检查文件修改时间
 		if info.ModTime().Before(threshold) {
 			if err := os.Remove(path); err != nil {
-				logger.Warn("删除文件失败", zap.String("path", path), zap.Error(err))
+				logger.Warn("删除文件失败", zap.String("路径", path), zap.Error(err))
 				return err
 			}
 			count++
-			logger.Info("已删除旧文件", zap.String("path", path), zap.Time("mod_time", info.ModTime()))
+			logger.Info("已删除旧文件", zap.String("路径", path), zap.Time("修改时间", info.ModTime()))
 		}
 
 		return nil

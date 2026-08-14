@@ -103,10 +103,12 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 	}
 
 	rows := make([]rowData, len(cases))
+	// totalMs = 所有接口耗时×执行次数的总和，用于计算每个接口耗时占比
 	var totalMs float64
 	for i, c := range cases {
 		totalMs += c.AverageDurationMs * float64(c.ExecutionCount)
 
+		// 耗时格式化：>=1s 显示为秒（带2位小数），否则显示为毫秒
 		var timeStr string
 		if c.AverageDurationMs >= 1000 {
 			timeStr = fmt.Sprintf("%.2fs", c.AverageDurationMs/1000)
@@ -114,6 +116,7 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 			timeStr = fmt.Sprintf("%.0fms", c.AverageDurationMs)
 		}
 
+		// 描述为空时回退使用用例ID，保证该列有内容（此版本不截断，保持完整）
 		desc := c.TestCaseDesc
 		if desc == "" {
 			desc = c.TestCaseID
@@ -127,7 +130,8 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 		}
 	}
 
-	// 根据表头和实际内容动态计算列宽
+	// 动态列宽：先以表头最小宽度初始化，再逐行取内容最大显示宽度
+	// 使用 displayWidth 计算（中文字符占2列），保证等宽字体下真正对齐
 	idW := max(displayWidth("用例ID"), 4)
 	descW := max(displayWidth("描述"), 4)
 	timeW := max(displayWidth("平均耗时"), 4)
@@ -135,6 +139,7 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 	shareW := max(displayWidth("耗时占比"), 7)
 
 	for i, r := range rows {
+		// 耗时占比 = 该接口总耗时 / 全部接口总耗时 × 100%
 		if totalMs > 0 {
 			rows[i].share = cases[i].AverageDurationMs * float64(cases[i].ExecutionCount) / totalMs * 100
 		}
@@ -144,10 +149,20 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 		countW = max(countW, displayWidth(r.countStr))
 	}
 
-	// 排名列固定按 "#%-3d" 计算，即 4 个显示宽度
+	// 排名列固定按 "#%-3d" 格式计算，占 4 个显示宽度；其余列按动态宽度
 	sepWidth := 4 + 1 + idW + 1 + descW + 1 + timeW + 1 + countW + 1 + shareW
 
+	// 调试日志：输出最终列宽，便于核对对齐异常
+	logger.Debug("渲染平均耗时表格",
+		zap.Int("行数", len(cases)),
+		zap.Int("用例ID列宽", idW),
+		zap.Int("描述列宽", descW),
+		zap.Int("耗时列宽", timeW),
+		zap.Int("次数列宽", countW),
+		zap.Int("分隔线宽", sepWidth))
+
 	var sb strings.Builder
+	// 表头：各列用 padRight 填充到动态宽度，列间以单个空格分隔
 	sb.WriteString(fmt.Sprintf("%-4s %s %s %s %s %s\n",
 		"排名",
 		padRight("用例ID", idW),
@@ -155,8 +170,10 @@ func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 		padRight("平均耗时", timeW),
 		padRight("执行次数", countW),
 		padRight("耗时占比", shareW)))
+	// 分隔线与表头等宽
 	sb.WriteString(strings.Repeat("-", sepWidth) + "\n")
 
+	// 数据行：与表头使用同一套列宽，保证逐列对齐；耗时占比右对齐 5.1f%%
 	for i, r := range rows {
 		sb.WriteString(fmt.Sprintf("#%-3d %s %s %s %s %5.1f%%\n",
 			i+1,

@@ -41,6 +41,8 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 			stats = append(stats, *liveSummary)
 		}
 	}
+	// 调试日志：确认当日汇总是否取到数据（为 0 时日报统计区为空）
+	logger.Debug("日报数据获取 - 当日汇总", zap.Int("条数", len(stats)), zap.String("日期", dateStr))
 
 	// 近N天趋势数据（用于趋势图）
 	trendFrom := now.AddDate(0, 0, -(TrendDays - 1)).Format("2006-01-02")
@@ -55,6 +57,8 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 	if len(trendStats) == 0 {
 		trendStats = stats
 	}
+	// 调试日志：确认趋势数据量；为空时已在上方回退到当日数据
+	logger.Debug("日报数据获取 - 趋势数据", zap.Int("条数", len(trendStats)), zap.String("起始", trendFrom), zap.String("结束", dateStr))
 
 	slowCases, err := storage.GetCaseAverageDurations("desc")
 	if err != nil {
@@ -67,12 +71,16 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 	if len(slowCases) > topSlowN {
 		slowCases = slowCases[:topSlowN]
 	}
+	// 调试日志：确认慢接口条数（已截断到 topSlowN）
+	logger.Debug("日报数据获取 - 慢接口", zap.Int("条数", len(slowCases)), zap.Int("慢接口上限", topSlowN))
 
 	alertCases, err := storage.GetConsecutiveFailures(consecutiveFailN)
 	if err != nil {
 		logger.Warn("获取连续失败告警失败，日报将不包含告警信息", zap.Error(err))
 		alertCases = nil
 	}
+	// 调试日志：确认连续失败告警条数（consecutiveFailN 为判定阈值）
+	logger.Debug("日报数据获取 - 连续失败告警", zap.Int("条数", len(alertCases)), zap.Int("连续失败阈值", consecutiveFailN))
 
 	return &DayReport{
 		Date:       dateStr,

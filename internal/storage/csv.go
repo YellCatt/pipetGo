@@ -69,7 +69,7 @@ func InitDB(dir string) error {
 
 func initCSVInternal(dir string) error {
 	logger.Info("========== 开始初始化 CSV 存储 ==========")
-	logger.Info("数据目录参数值", zap.String("dataDir", dir))
+	logger.Info("数据目录参数值", zap.String("数据目录", dir))
 
 	if dir == "" {
 		logger.Info("数据目录为空，使用默认值 ./sql")
@@ -77,17 +77,17 @@ func initCSVInternal(dir string) error {
 	}
 
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		logger.Error("创建数据目录失败", zap.String("dataDir", dir), zap.Error(err))
+		logger.Error("创建数据目录失败", zap.String("数据目录", dir), zap.Error(err))
 		return err
 	}
 
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
-		logger.Error("获取数据目录绝对路径失败", zap.String("dir", dir), zap.Error(err))
+		logger.Error("获取数据目录绝对路径失败", zap.String("目录", dir), zap.Error(err))
 		return err
 	}
 	dataDir = absDir
-	logger.Info("数据目录创建成功", zap.String("dataDir", dataDir))
+	logger.Info("数据目录创建成功", zap.String("数据目录", dataDir))
 
 	if err := ensureCSV(executionCSVPath(), executionHeader); err != nil {
 		logger.Error("初始化执行记录 CSV 失败", zap.Error(err))
@@ -322,7 +322,7 @@ func GetAllAverageDurations() (map[string]time.Duration, error) {
 		}
 	}
 
-	logger.Info("获取平均耗时: 已找到", zap.Int("count", len(averages)), zap.Any("averages", averages))
+	logger.Info("获取平均耗时: 已找到", zap.Int("数量", len(averages)), zap.Any("平均值列表", averages))
 	if len(averages) == 0 {
 		logger.Warn("获取平均耗时: 未找到历史数据")
 	}
@@ -679,6 +679,12 @@ func GetDailySummaries(fromDate, toDate string) ([]DailySummary, error) {
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].Date < summaries[j].Date
 	})
+	// 调试日志：raw_records 为读取到的全部记录数，result 为按日期区间过滤后的结果数
+	logger.Debug("查询每日汇总",
+		zap.Int("原始记录数", len(records)),
+		zap.String("起始日期", fromDate),
+		zap.String("结束日期", toDate),
+		zap.Int("结果条数", len(summaries)))
 	return summaries, nil
 }
 
@@ -758,6 +764,11 @@ func GetCaseAverageDurations(order string) ([]CaseAvgDuration, error) {
 		return result[i].AverageDurationMs > result[j].AverageDurationMs
 	})
 
+	// 调试日志：raw_records 为读取到的全部记录数，result 为排序后返回的结果数
+	logger.Debug("查询平均耗时",
+		zap.Int("原始记录数", len(records)),
+		zap.String("排序方式", order),
+		zap.Int("结果条数", len(result)))
 	return result, nil
 }
 
@@ -815,6 +826,12 @@ func GetConsecutiveFailures(n int) ([]ConsecutiveFailureInfo, error) {
 			window = window[:n]
 		}
 		if len(window) < n {
+			// 调试日志：该用例最近执行历史不足 n 轮，无法判定为连续失败，跳过
+			logger.Debug("用例历史不足阈值，跳过",
+				zap.String("用例ID", id),
+				zap.Int("历史记录数", len(hist)),
+				zap.Int("窗口长度", len(window)),
+				zap.Int("阈值", n))
 			continue
 		}
 		allFail := true
@@ -845,6 +862,13 @@ func GetConsecutiveFailures(n int) ([]ConsecutiveFailureInfo, error) {
 	sort.Slice(alerts, func(i, j int) bool {
 		return alerts[i].FailCount > alerts[j].FailCount
 	})
+
+	// 调试日志：raw_records 为全部用例记录数，threshold 为连续失败判定阈值，result 为最终告警数
+	// 若 result 远小于预期，通常是历史记录不足 threshold 轮，可查看下方 per-case 调试日志
+	logger.Debug("查询连续失败告警",
+		zap.Int("原始记录数", len(records)),
+		zap.Int("阈值", n),
+		zap.Int("结果条数", len(alerts)))
 	return alerts, nil
 }
 

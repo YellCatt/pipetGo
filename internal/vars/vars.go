@@ -70,15 +70,15 @@ func Replace(text string) string {
 	result := re.ReplaceAllStringFunc(text, func(match string) string {
 		key := strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}")
 		if value, ok := vars[key]; ok {
-			logger.Debug("变量替换命中", zap.String("key", key), zap.String("value", maskValue(value)))
+			logger.Debug("变量替换命中", zap.String("变量名", key), zap.String("变量值", maskValue(value)))
 			return value
 		}
-		logger.Debug("变量未找到，保留原样", zap.String("key", key), zap.String("text", text))
+		logger.Debug("变量未找到，保留原样", zap.String("变量名", key), zap.String("原文", text))
 		return match
 	})
 
 	if result != text {
-		logger.Debug("Replace 完成", zap.String("before", text), zap.String("after", maskValue(result)))
+		logger.Debug("替换完成", zap.String("替换前", text), zap.String("替换后", maskValue(result)))
 	}
 	return result
 }

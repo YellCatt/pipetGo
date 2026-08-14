@@ -244,17 +244,20 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 	}
 
 	rows := make([]slowRow, len(cases))
+	// totalMs = 所有接口耗时×执行次数的总和，用于后续计算每个接口耗时占比
 	var totalMs float64
 	for _, c := range cases {
 		totalMs += c.AverageDurationMs * float64(c.ExecutionCount)
 	}
 
 	for i, c := range cases {
+		// 描述为空时回退使用用例ID，保证该列有内容
 		desc := c.TestCaseDesc
 		if desc == "" {
 			desc = c.TestCaseID
 		}
 
+		// 耗时格式化：>=1s 显示为秒（带2位小数），否则显示为毫秒
 		var timeStr string
 		if c.AverageDurationMs >= 1000 {
 			timeStr = fmt.Sprintf("%.2fs", c.AverageDurationMs/1000)
@@ -262,11 +265,13 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 			timeStr = fmt.Sprintf("%.0fms", c.AverageDurationMs)
 		}
 
+		// 耗时占比 = 该接口总耗时 / 全部接口总耗时 × 100%
 		share := 0.0
 		if totalMs > 0 {
 			share = c.AverageDurationMs * float64(c.ExecutionCount) / totalMs * 100
 		}
 
+		// 进度条长度：按该接口耗时与最大耗时之比，缩放到 barWidth 内
 		barLen := int(c.AverageDurationMs / maxDur * float64(barWidth))
 		if barLen > barWidth {
 			barLen = barWidth
@@ -282,7 +287,8 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 		}
 	}
 
-	// 根据实际内容动态计算列宽，保证完整显示并对齐
+	// 动态列宽：先以表头最小宽度初始化，再逐行取内容最大显示宽度
+	// 注意用 displayWidth 计算（中文字符占2列），保证等宽字体下真正对齐
 	rankW := max(displayWidth("排名"), 4)
 	idW := max(displayWidth("用例ID"), 4)
 	descW := max(displayWidth("描述"), 4)
@@ -297,8 +303,20 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 		countW = max(countW, displayWidth(r.countStr))
 	}
 
+	// 耗时占比区域宽度 = 进度条(barWidth) + 空格(1) + 占比文本(shareW)
 	shareAreaW := barWidth + 1 + shareW
+	// 分隔线总宽 = 各列宽 + 列间空格(每列1个)
 	sepWidth := rankW + 1 + idW + 1 + descW + 1 + timeW + 1 + countW + 1 + shareAreaW
+
+	// 调试日志：输出最终列宽，便于核对对齐异常（如某列过宽/过窄）
+	logger.Debug("渲染慢接口表格",
+		zap.Int("行数", len(cases)),
+		zap.Int("排名列宽", rankW),
+		zap.Int("用例ID列宽", idW),
+		zap.Int("描述列宽", descW),
+		zap.Int("耗时列宽", timeW),
+		zap.Int("次数列宽", countW),
+		zap.Int("分隔线宽", sepWidth))
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("  %s %s %s %s %s %s\n",
@@ -328,7 +346,12 @@ func renderSlowCases(cases []storage.CaseAvgDuration) string {
 	return sb.String()
 }
 
-// renderAlertCases 渲染连续失败告警
+// renderAlertCases 渲染连续失败告警文本表格
+// 输出格式：
+//   以下用例连续 N 轮失败，请重点关注:
+//     <表头>
+//     <分隔线>
+//     <数据行...>
 func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 	if len(alerts) == 0 {
 		return "  (无连续失败告警)\n"
@@ -340,9 +363,11 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 		lastExec string
 	}
 
+	// 描述最大显示宽度，避免个别超长描述把表格撑得过宽
 	const maxDescWidth = 30
 	rows := make([]alertRow, len(alerts))
 	for i, a := range alerts {
+		// 描述为空时回退使用用例ID
 		desc := a.TestCaseDesc
 		if desc == "" {
 			desc = a.TestCaseID
@@ -356,7 +381,7 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 		}
 	}
 
-	// 根据实际内容动态计算列宽，保证表头与数据行对齐
+	// 动态列宽：先以表头最小宽度初始化，再逐行取内容最大显示宽度
 	idW := max(displayWidth("用例ID"), 4)
 	descW := max(displayWidth("描述"), 4)
 	timeW := max(displayWidth("最近执行时间"), 4)
@@ -367,17 +392,30 @@ func renderAlertCases(alerts []storage.ConsecutiveFailureInfo) string {
 		timeW = max(timeW, displayWidth(r.lastExec))
 	}
 
+	// 分隔线总宽 = 各列宽 + 列间空格(每列1个)
 	sepWidth := idW + 1 + descW + 1 + timeW
 
+	// 调试日志：输出最终列宽，便于核对对齐异常
+	logger.Debug("渲染连续失败告警",
+		zap.Int("告警数", len(alerts)),
+		zap.Int("用例ID列宽", idW),
+		zap.Int("描述列宽", descW),
+		zap.Int("时间列宽", timeW),
+		zap.Int("分隔线宽", sepWidth))
+
 	var sb strings.Builder
+	// 连续失败轮数 = 每个用例的最近执行结果长度（alerts[0] 与所有用例一致）
 	// 说明文字与下方表格保持同样的 2 空格缩进，整体对齐
 	sb.WriteString(fmt.Sprintf("  以下用例连续 %d 轮失败，请重点关注:\n\n", len(alerts[0].RecentResults)))
+	// 表头：三列均用 padRight 填充到各自动态宽度，列间以单个空格分隔
 	sb.WriteString(fmt.Sprintf("  %s %s %s\n",
 		padRight("用例ID", idW),
 		padRight("描述", descW),
 		padRight("最近执行时间", timeW)))
+	// 分隔线与表头等宽
 	sb.WriteString("  " + strings.Repeat("-", sepWidth) + "\n")
 
+	// 数据行：与表头使用同一套列宽，保证逐列对齐
 	for _, r := range rows {
 		sb.WriteString(fmt.Sprintf("  %s %s %s\n",
 			padRight(r.id, idW),

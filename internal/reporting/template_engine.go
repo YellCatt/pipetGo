@@ -228,6 +228,7 @@ func BuildReportData(tmpl ReportTemplate, startDate, endDate, deviceName string,
 	}
 
 	// 汇总统计：仅使用 dailyStats（当日/当周/当月汇总）
+	// 调试关注点：若 dailyStats 为空，Total/Passed 等字段保持 0，PassBar 也为空。
 	if len(dailyStats) > 0 {
 		var totalDur time.Duration
 		for _, d := range dailyStats {
@@ -237,42 +238,54 @@ func BuildReportData(tmpl ReportTemplate, startDate, endDate, deviceName string,
 			data.Skipped += d.Skipped
 			totalDur += time.Duration(d.TotalDurationMs) * time.Millisecond
 		}
+		// 通过率 = 通过数 / (通过数 + 失败数)，分母为 0 时保持 0 避免除零
 		if data.Passed+data.Failed > 0 {
 			data.PassRate = float64(data.Passed) / float64(data.Passed+data.Failed) * 100
 		}
 		data.TotalDuration = totalDur.String()
 
+		// 通过率进度条：barWidth 为固定总宽度，按通过率比例切分实心/空心块
 		barLen := int(data.PassRate / 100 * float64(barWidth))
 		data.PassBar = strings.Repeat("█", barLen)
 		data.PassSpace = strings.Repeat("░", barWidth-barLen)
 	}
 
-	// 趋势图：优先使用 trendStats，为空时回退到 dailyStats
+	// 趋势图：优先使用 trendStats（跨周期趋势），为空时回退到 dailyStats（单日趋势）
 	chartStats := trendStats
 	if len(chartStats) == 0 {
 		chartStats = dailyStats
 	}
 
-	// 用例增长趋势图
+	// 用例增长趋势图（仅当模板开启 ShowGrowth）
 	if data.ShowGrowth {
 		data.GrowthChart = renderCaseGrowthChart(chartStats)
 	}
 
-	// 错误率趋势图
+	// 错误率趋势图（仅当模板开启 ShowError）
 	if data.ShowError {
 		data.ErrorChart = renderErrorRateChart(chartStats)
 	}
 
-	// 慢接口排名
+	// 慢接口排名（仅当模板开启 ShowSlow 且确有数据）——调试日志在 renderSlowCases 内部
 	if data.ShowSlow && len(slowCases) > 0 {
 		data.SlowCount = len(slowCases)
 		data.SlowChart = renderSlowCases(slowCases)
 	}
 
-	// 连续失败告警
+	// 连续失败告警（仅当模板开启 ShowAlert 且确有数据）——调试日志在 renderAlertCases 内部
 	if data.ShowAlert && len(alertCases) > 0 {
 		data.AlertChart = renderAlertCases(alertCases)
 	}
+
+	// 调试日志：汇总各阶段数据量与开关，便于确认“为何某模块未显示”
+	logger.Debug("构建报告数据",
+		zap.String("类型", tmpl.ReportType),
+		zap.Int("当日汇总", len(dailyStats)),
+		zap.Int("趋势数据", len(trendStats)),
+		zap.Int("慢接口", len(slowCases)),
+		zap.Int("连续失败告警", len(alertCases)),
+		zap.Bool("显示慢接口", tmpl.ShowSlow),
+		zap.Bool("显示告警", tmpl.ShowAlert))
 
 	return data
 }

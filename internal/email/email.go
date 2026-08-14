@@ -72,10 +72,10 @@ func SendEmail(subject, body string) error {
 	auth := smtp.PlainAuth("", cfg.FromEmail, cfg.AuthCode, cfg.SMTPServer)
 
 	logger.Info("开始连接 SMTP 服务器",
-		zap.String("smtp_server", cfg.SMTPServer),
-		zap.Int("smtp_port", cfg.SMTPPort),
-		zap.String("from", cfg.FromEmail),
-		zap.Int("recipients", len(cfg.ToEmail)))
+		zap.String("SMTP服务器", cfg.SMTPServer),
+		zap.Int("SMTP端口", cfg.SMTPPort),
+		zap.String("发件人", cfg.FromEmail),
+		zap.Int("收件人数", len(cfg.ToEmail)))
 
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,

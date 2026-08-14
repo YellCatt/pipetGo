@@ -45,7 +45,7 @@ func NewAppContext() (context.Context, context.CancelFunc) {
 	go func() {
 		select {
 		case sig := <-sigCh:
-			logger.Info("收到退出信号，正在优雅关闭...", zap.String("signal", sig.String()))
+			logger.Info("收到退出信号，正在优雅关闭...", zap.String("信号", sig.String()))
 			cancel()
 		case <-ctx.Done():
 		}
@@ -57,15 +57,15 @@ func NewAppContext() (context.Context, context.CancelFunc) {
 
 func Init(ctx context.Context) {
 	vars.Set("base_url", config.AppConfig.Target.BaseURL)
-	logger.Debug("内置变量 base_url 已设置", zap.String("base_url", config.AppConfig.Target.BaseURL))
+	logger.Debug("内置变量 base_url 已设置", zap.String("基础地址", config.AppConfig.Target.BaseURL))
 
 	if len(config.AppConfig.Vars) > 0 {
 		vars.InitFromConfig(config.AppConfig.Vars)
-		logger.Info("用户自定义变量加载完成", zap.Int("count", len(config.AppConfig.Vars)), zap.Any("vars", maskVars(config.AppConfig.Vars)))
+		logger.Info("用户自定义变量加载完成", zap.Int("数量", len(config.AppConfig.Vars)), zap.Any("变量", maskVars(config.AppConfig.Vars)))
 	} else {
 		logger.Info("未配置用户自定义变量")
 	}
-	logger.Info("当前可用变量", zap.Any("vars", vars.GetAll()))
+	logger.Info("当前可用变量", zap.Any("变量", vars.GetAll()))
 
 	email.InitEmail(email.EmailConfig{
 		Enabled:    config.AppConfig.Email.Enabled,
@@ -76,7 +76,7 @@ func Init(ctx context.Context) {
 		SMTPPort:   config.AppConfig.Email.SMTPPort,
 		DeviceName: config.AppConfig.Test.DeviceName,
 	})
-	logger.Debug("邮件配置初始化完成", zap.Bool("enabled", config.AppConfig.Email.Enabled))
+	logger.Debug("邮件配置初始化完成", zap.Bool("已启用", config.AppConfig.Email.Enabled))
 
 	scheduler.Start(
 		ctx,
@@ -267,7 +267,7 @@ func RunSendReports(ctx context.Context, opts Options) {
 }
 
 func RunTests(ctx context.Context, paths []string, opts Options) {
-	logger.Debug("RunTests 被调用", zap.Strings("paths", paths))
+	logger.Debug("RunTests 被调用", zap.Strings("路径", paths))
 	_ = ExecuteTestCycle(ctx, paths, opts)
 	logger.Debug("ExecuteTestCycle 执行完成")
 	waitForScheduler(ctx)
@@ -295,7 +295,7 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 	httpclient.InitClient()
 	logger.Debug("HTTP 客户端初始化完成")
 
-	logger.Info("准备初始化 CSV 存储", zap.String("DataDir", cfg.Test.DataDir))
+	logger.Info("准备初始化 CSV 存储", zap.String("数据目录", cfg.Test.DataDir))
 	if err := storage.InitDB(cfg.Test.DataDir); err != nil {
 		logger.Warn("CSV 存储初始化失败", zap.Error(err))
 	} else {
@@ -305,14 +305,14 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 		if err != nil {
 			logger.Warn("获取执行计数失败", zap.Error(err))
 		} else {
-			logger.Info("找到历史执行记录", zap.Int("count", count))
+			logger.Info("找到历史执行记录", zap.Int("数量", count))
 		}
 	}
 
 	if len(paths) == 0 {
 		paths = cfg.Test.TestCaseDir
 	}
-	logger.Debug("待解析的测试用例路径", zap.Strings("paths", paths))
+	logger.Debug("待解析的测试用例路径", zap.Strings("路径", paths))
 
 	logger.Debug("开始解析 PSV/CSV 测试用例文件")
 	testCases, err := psv.ParseFiles(paths)
@@ -324,7 +324,7 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 		}
 		os.Exit(1)
 	}
-	logger.Debug("PSV 解析完成", zap.Int("count", len(testCases)))
+	logger.Debug("PSV 解析完成", zap.Int("数量", len(testCases)))
 
 	testcase.SetAllTestCases(testCases)
 
@@ -339,7 +339,7 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 	totalTestCaseCount, totalChainCount, totalIndependentCount := testcase.CountTestSummary(testCases)
 
 	testCases = testcase.FilterByTags(testCases, tags)
-	logger.Debug("标签过滤后剩余", zap.Int("count", len(testCases)))
+	logger.Debug("标签过滤后剩余", zap.Int("数量", len(testCases)))
 
 	if len(testCases) == 0 {
 		logger.Debug("没有需要执行的测试用例，ExecuteTestCycle 返回")
@@ -347,7 +347,7 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 		return nil
 	}
 
-	logger.Info("开始执行 API 测试", zap.Int("count", len(testCases)))
+	logger.Info("开始执行 API 测试", zap.Int("数量", len(testCases)))
 
 	estimatedDuration := calculateEstimatedDuration(testCases)
 
@@ -507,7 +507,7 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 		if err := storage.RecordDailySummary(todayStr, passedCount+failedCount+skippedCount, passedCount, failedCount, skippedCount, totalDuration); err != nil {
 			logger.Warn("记录每日汇总失败", zap.Error(err))
 		} else {
-			logger.Info("每日汇总已记录", zap.String("date", todayStr))
+			logger.Info("每日汇总已记录", zap.String("日期", todayStr))
 		}
 	}
 
@@ -640,7 +640,7 @@ func executeTestRound(ctx context.Context, testCases []psv.TestCase, reportTimes
 
 	for i, tc := range testCases {
 		if ctx.Err() != nil {
-			logger.Info("测试执行被取消，停止当前轮次", zap.String("case_id", tc.ID), zap.Error(ctx.Err()))
+			logger.Info("测试执行被取消，停止当前轮次", zap.String("用例ID", tc.ID), zap.Error(ctx.Err()))
 			break
 		}
 		result := testcase.ExecuteTestCaseWithContext(ctx, tc)

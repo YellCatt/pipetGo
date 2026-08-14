@@ -278,6 +278,8 @@ func SendWeeklyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl 
 	subject := fmt.Sprintf("【测试周报】pipetGo - %s (%s ~ %s)", email.GetDeviceName(), report.StartDate, report.EndDate)
 	body := report.FormatWeekReport()
 
+	// 调试日志：报告已生成，记录类型与关键阈值；body_len 可用于判断内容是否为空
+	logger.Debug("生成报告完成", zap.String("类型", "周报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送周报邮件",
 		zap.String("subject", subject))
 	return email.SendEmail(subject, body)
@@ -301,6 +303,8 @@ func SendDailyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl R
 	subject := fmt.Sprintf("【测试日报】pipetGo - %s (%s)", email.GetDeviceName(), report.Date)
 	body := report.FormatDayReport()
 
+	// 调试日志：报告已生成，记录类型与关键阈值；body_len 可用于判断内容是否为空
+	logger.Debug("生成报告完成", zap.String("类型", "日报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送日报邮件",
 		zap.String("subject", subject))
 	return email.SendEmail(subject, body)
@@ -324,6 +328,8 @@ func SendMonthlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl
 	subject := fmt.Sprintf("【测试月报】pipetGo - %s (%s ~ %s)", email.GetDeviceName(), report.StartDate, report.EndDate)
 	body := report.FormatMonthReport()
 
+	// 调试日志：报告已生成，记录类型与关键阈值；body_len 可用于判断内容是否为空
+	logger.Debug("生成报告完成", zap.String("类型", "月报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送月报邮件",
 		zap.String("subject", subject))
 	return email.SendEmail(subject, body)
@@ -347,6 +353,8 @@ func SendYearlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl 
 	subject := fmt.Sprintf("【测试年报】pipetGo - %s (%s ~ %s)", email.GetDeviceName(), report.StartDate, report.EndDate)
 	body := report.FormatYearReport()
 
+	// 调试日志：报告已生成，记录类型与关键阈值；body_len 可用于判断内容是否为空
+	logger.Debug("生成报告完成", zap.String("类型", "年报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送年报邮件",
 		zap.String("subject", subject))
 	return email.SendEmail(subject, body)
@@ -442,6 +450,7 @@ func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFai
 		body.WriteString(renderFailureTable(aggregated, true, alertIDs))
 	}
 
+	// 连续失败告警：标题含连续轮数，表格交由 renderAlertCases 动态渲染（不截断、列宽自适应）
 	if len(alerts) > 0 {
 		body.WriteString(fmt.Sprintf("\n⚠️ 连续失败告警 (连续%d轮):\n", consecutiveFailN))
 		body.WriteString(renderAlertCases(alerts))

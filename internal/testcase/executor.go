@@ -158,10 +158,10 @@ func finishTestCase(ctx context.Context, tc psv.TestCase, result TestResult, sta
 	result.Duration = result.EndTime.Sub(startTime)
 
 	if result.Passed {
-		logger.Info("测试通过", zap.String("id", tc.ID), zap.Duration("duration", result.Duration))
+		logger.Info("测试通过", zap.String("用例ID", tc.ID), zap.Duration("耗时", result.Duration))
 		fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 	} else {
-		logger.Error("测试失败", zap.String("id", tc.ID), zap.String("error", result.Error))
+		logger.Error("测试失败", zap.String("用例ID", tc.ID), zap.String("错误", result.Error))
 		fmt.Printf("[%s] [%s] %s ... FAIL (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 		if result.Error != "" {
 			fmt.Printf("            Error: %s\n", result.Error)
@@ -173,7 +173,7 @@ func finishTestCase(ctx context.Context, tc psv.TestCase, result TestResult, sta
 	}
 
 	shouldCleanup := !tc.KeepVars && tc.Extract != "" && !isUsedAsPreCondition(tc.ID) && !IsSetupTestCase(tc)
-	logger.Info("变量清理决策", zap.String("test", tc.ID), zap.Bool("shouldCleanup", shouldCleanup), zap.Bool("KeepVars", tc.KeepVars), zap.String("Extract", tc.Extract), zap.Bool("isUsedAsPreCondition", isUsedAsPreCondition(tc.ID)), zap.Bool("IsSetupTestCase", IsSetupTestCase(tc)))
+	logger.Info("变量清理决策", zap.String("用例", tc.ID), zap.Bool("是否清理", shouldCleanup), zap.Bool("保留变量", tc.KeepVars), zap.String("提取表达式", tc.Extract), zap.Bool("是否作为前置条件被引用", isUsedAsPreCondition(tc.ID)), zap.Bool("是否初始化用例", IsSetupTestCase(tc)))
 	if shouldCleanup {
 		extractParts := strings.Split(tc.Extract, ",")
 		globalVarsMu.Lock()
@@ -182,25 +182,25 @@ func finishTestCase(ctx context.Context, tc psv.TestCase, result TestResult, sta
 			if idx := strings.Index(part, "="); idx != -1 {
 				varName := strings.TrimSpace(part[:idx])
 				if isVariableUsed(varName) {
-					logger.Info("变量被其他用例引用，跳过清理", zap.String("name", varName), zap.String("test", tc.ID))
+					logger.Info("变量被其他用例引用，跳过清理", zap.String("变量名", varName), zap.String("用例", tc.ID))
 					continue
 				}
 				delete(globalVars, varName)
 				vars.Delete(varName)
-				logger.Debug("已清理变量", zap.String("name", varName), zap.String("test", tc.ID))
+				logger.Debug("已清理变量", zap.String("变量名", varName), zap.String("用例", tc.ID))
 			}
 		}
 		globalVarsMu.Unlock()
 	}
 
 	if tc.DelayAfterMs > 0 {
-		logger.Info("测试后等待", zap.String("id", tc.ID), zap.Int("delay_after_ms", tc.DelayAfterMs))
+		logger.Info("测试后等待", zap.String("用例ID", tc.ID), zap.Int("等待毫秒", tc.DelayAfterMs))
 		delay := time.Duration(tc.DelayAfterMs) * time.Millisecond
 		if ctx != nil {
 			select {
 			case <-time.After(delay):
 			case <-ctx.Done():
-				logger.Warn("测试后等待被取消", zap.String("id", tc.ID), zap.Error(ctx.Err()))
+				logger.Warn("测试后等待被取消", zap.String("用例ID", tc.ID), zap.Error(ctx.Err()))
 			}
 		} else {
 			time.Sleep(delay)
@@ -229,10 +229,10 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 		StartTime: startTime,
 	}
 
-	logger.Info("正在执行测试", zap.String("id", tc.ID), zap.String("desc", tc.Desc))
+	logger.Info("正在执行测试", zap.String("用例ID", tc.ID), zap.String("描述", tc.Desc))
 
 	if tc.Skip {
-		logger.Info("跳过测试", zap.String("id", tc.ID))
+		logger.Info("跳过测试", zap.String("用例ID", tc.ID))
 		result.Passed = true
 		result.EndTime = timeutil.Now()
 		result.Duration = result.EndTime.Sub(startTime)
@@ -284,7 +284,7 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 		zap.Any("processedHeaders", processedHeaders),
 		zap.String("processedBody", processedBody),
 		zap.String("processedJSON", processedJSON))
-	logger.Info("当前全局变量", zap.Any("vars", vars.GetAll()))
+	logger.Info("当前全局变量", zap.Any("变量", vars.GetAll()))
 
 	var requestBody string
 	if tc.JSON != "" {
@@ -415,7 +415,7 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 			globalVarsMu.Unlock()
 			extractedVarsJSON, _ := json.Marshal(extractedVars)
 			result.ExtractedVars = string(extractedVarsJSON)
-			logger.Info("已提取变量", zap.String("id", tc.ID), zap.Any("vars", extractedVars))
+			logger.Info("已提取变量", zap.String("用例ID", tc.ID), zap.Any("变量", extractedVars))
 		}
 	}
 
@@ -497,7 +497,7 @@ func executeStreamAssertWithContext(ctx context.Context, tc psv.TestCase, resp *
 			result.Passed = true
 			result.EndTime = timeutil.Now()
 			result.Duration = result.EndTime.Sub(startTime)
-			logger.Info("流式断言通过", zap.String("id", tc.ID))
+			logger.Info("流式断言通过", zap.String("用例ID", tc.ID))
 			fmt.Printf("[%s] [%s] %s ... PASS (%.3fs)\n", timeutil.FormatDateTime(result.EndTime), tc.ID, tc.Desc, result.Duration.Seconds())
 			return result
 		} else {
@@ -537,7 +537,7 @@ func executeStreamAssertWithContext(ctx context.Context, tc psv.TestCase, resp *
 			globalVarsMu.Unlock()
 			extractedVarsJSON, _ := json.Marshal(extractedVars)
 			result.ExtractedVars = string(extractedVarsJSON)
-			logger.Info("已提取变量", zap.String("id", tc.ID), zap.Any("vars", extractedVars))
+			logger.Info("已提取变量", zap.String("用例ID", tc.ID), zap.Any("变量", extractedVars))
 		}
 	}
 
@@ -979,7 +979,7 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 		}
 	}
 
-	logger.Info("报告已保存", zap.String("all", allPath), zap.String("error", errorPath))
+	logger.Info("报告已保存", zap.String("全量报告路径", allPath), zap.String("错误报告路径", errorPath))
 	return allPath, errorPath
 }
 
