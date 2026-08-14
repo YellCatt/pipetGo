@@ -8,8 +8,11 @@ import (
 	"text/template"
 	"time"
 
+	"pipetGo/internal/logger"
 	"pipetGo/internal/storage"
 	"pipetGo/internal/timeutil"
+
+	"go.uber.org/zap"
 )
 
 //go:embed templates/text/*.tmpl
