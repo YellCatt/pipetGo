@@ -444,16 +444,7 @@ func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFai
 
 	if len(alerts) > 0 {
 		body.WriteString(fmt.Sprintf("\n⚠️ 连续失败告警 (连续%d轮):\n", consecutiveFailN))
-		body.WriteString("以下用例连续失败，请重点关注:\n")
-		body.WriteString(fmt.Sprintf("  %-20s %-35s %s\n", "用例ID", "描述", "最近执行时间"))
-		body.WriteString("  " + strings.Repeat("-", 68) + "\n")
-		for _, a := range alerts {
-			desc := a.TestCaseDesc
-			if len(desc) > 33 {
-				desc = desc[:30] + "..."
-			}
-			body.WriteString(fmt.Sprintf("  %-20s %-35s %s\n", a.TestCaseID, desc, a.LastExecuted))
-		}
+		body.WriteString(renderAlertCases(alerts))
 	}
 
 	if len(slowCases) > 0 {

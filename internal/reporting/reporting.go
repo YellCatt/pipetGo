@@ -88,58 +88,83 @@ func GetCaseDurationList(topN int) []storage.CaseAvgDuration {
 }
 
 // FormatCaseDurationTable 格式化用例耗时表格
+// 列宽根据实际内容动态计算，用例ID和描述保持完整不被截断。
 func FormatCaseDurationTable(cases []storage.CaseAvgDuration) string {
 	if len(cases) == 0 {
 		return "(无数据)"
 	}
-	var sb strings.Builder
 
-	idWidth := 18
-	descWidth := 30
-	timeWidth := 10
-	countWidth := 8
-	// 分隔线宽度 = 排名 + 各列 + 分隔空格 + 占比
-	// "#%-3d"=4, 各列间各1空格, 占比=" %5.1f%%"=7
-	sepWidth := 4 + 1 + idWidth + 1 + descWidth + 1 + timeWidth + 1 + countWidth + 7
-
-	sb.WriteString(fmt.Sprintf("%-4s %s %s %s %s %s\n",
-		"排名",
-		padRight("用例ID", idWidth),
-		padRight("描述", descWidth),
-		padRight("平均耗时", timeWidth),
-		padRight("执行次数", countWidth),
-		"耗时占比"))
-	sb.WriteString(strings.Repeat("-", sepWidth) + "\n")
-
-	var totalMs float64
-	for _, c := range cases {
-		totalMs += c.AverageDurationMs * float64(c.ExecutionCount)
+	type rowData struct {
+		id       string
+		desc     string
+		timeStr  string
+		countStr string
+		share    float64
 	}
 
+	rows := make([]rowData, len(cases))
+	var totalMs float64
 	for i, c := range cases {
+		totalMs += c.AverageDurationMs * float64(c.ExecutionCount)
+
 		var timeStr string
-		ms := c.AverageDurationMs
-		if ms >= 1000 {
-			timeStr = fmt.Sprintf("%.2fs", ms/1000)
+		if c.AverageDurationMs >= 1000 {
+			timeStr = fmt.Sprintf("%.2fs", c.AverageDurationMs/1000)
 		} else {
-			timeStr = fmt.Sprintf("%.0fms", ms)
+			timeStr = fmt.Sprintf("%.0fms", c.AverageDurationMs)
 		}
+
 		desc := c.TestCaseDesc
 		if desc == "" {
 			desc = c.TestCaseID
 		}
-		desc = truncateDesc(desc, descWidth)
-		share := 0.0
-		if totalMs > 0 {
-			share = c.AverageDurationMs * float64(c.ExecutionCount) / totalMs * 100
+
+		rows[i] = rowData{
+			id:       c.TestCaseID,
+			desc:     desc,
+			timeStr:  timeStr,
+			countStr: fmt.Sprintf("%d", c.ExecutionCount),
 		}
+	}
+
+	// 根据表头和实际内容动态计算列宽
+	idW := max(displayWidth("用例ID"), 4)
+	descW := max(displayWidth("描述"), 4)
+	timeW := max(displayWidth("平均耗时"), 4)
+	countW := max(displayWidth("执行次数"), 4)
+	shareW := max(displayWidth("耗时占比"), 7)
+
+	for i, r := range rows {
+		if totalMs > 0 {
+			rows[i].share = cases[i].AverageDurationMs * float64(cases[i].ExecutionCount) / totalMs * 100
+		}
+		idW = max(idW, displayWidth(r.id))
+		descW = max(descW, displayWidth(r.desc))
+		timeW = max(timeW, displayWidth(r.timeStr))
+		countW = max(countW, displayWidth(r.countStr))
+	}
+
+	// 排名列固定按 "#%-3d" 计算，即 4 个显示宽度
+	sepWidth := 4 + 1 + idW + 1 + descW + 1 + timeW + 1 + countW + 1 + shareW
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%-4s %s %s %s %s %s\n",
+		"排名",
+		padRight("用例ID", idW),
+		padRight("描述", descW),
+		padRight("平均耗时", timeW),
+		padRight("执行次数", countW),
+		padRight("耗时占比", shareW)))
+	sb.WriteString(strings.Repeat("-", sepWidth) + "\n")
+
+	for i, r := range rows {
 		sb.WriteString(fmt.Sprintf("#%-3d %s %s %s %s %5.1f%%\n",
 			i+1,
-			padRight(truncateDesc(c.TestCaseID, idWidth), idWidth),
-			padRight(desc, descWidth),
-			padRight(timeStr, timeWidth),
-			padRight(fmt.Sprintf("%d", c.ExecutionCount), countWidth),
-			share))
+			padRight(r.id, idW),
+			padRight(r.desc, descW),
+			padRight(r.timeStr, timeW),
+			padRight(r.countStr, countW),
+			r.share))
 	}
 	return sb.String()
 }
