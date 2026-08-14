@@ -38,6 +38,93 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
+// renderFailureTable 渲染失败用例表格，列宽根据实际内容动态计算，保证中英文混排对齐。
+// withMarker 为 true 时，连续失败用例在错误信息末尾追加 " [连续失败]" 标记。
+// alertIDs 为连续失败用例 ID 集合（withMarker 为 true 时使用）。
+func renderFailureTable(aggregated []testcase.TestResult, withMarker bool, alertIDs map[string]bool) string {
+	const (
+		idMaxW   = 30 // ID 列最大显示宽度
+		descMaxW = 40 // 描述列最大显示宽度
+		errMaxW  = 55 // 错误信息列最大显示宽度
+	)
+
+	type failRow struct {
+		id      string
+		desc    string
+		status  string
+		durStr  string
+		err     string
+		marker  string
+	}
+
+	var rows []failRow
+	for _, r := range aggregated {
+		if !r.Passed && !r.TestCase.Skip {
+			marker := ""
+			if withMarker && alertIDs[r.TestCase.ID] {
+				marker = " [连续失败]"
+			}
+			rows = append(rows, failRow{
+				id:     r.TestCase.ID,
+				desc:   r.TestCase.Desc,
+				status: "FAIL",
+				durStr: r.Duration.String(),
+				err:    r.Error,
+				marker: marker,
+			})
+		}
+	}
+	if len(rows) == 0 {
+		return "(无失败用例)\n"
+	}
+
+	// 计算各列所需最大显示宽度（含表头），并加上本列上限以避免过宽
+	idW := displayWidth("ID")
+	descW := displayWidth("描述")
+	statusW := displayWidth("状态")
+	durW := displayWidth("耗时")
+	errW := displayWidth("错误信息")
+
+	for _, r := range rows {
+		idW = max(idW, displayWidth(truncateDesc(r.id, idMaxW)))
+		descW = max(descW, displayWidth(truncateDesc(r.desc, descMaxW)))
+		statusW = max(statusW, displayWidth(r.status))
+		durW = max(durW, displayWidth(r.durStr))
+		errW = max(errW, displayWidth(truncateDesc(r.err, errMaxW)))
+	}
+	// 标记列可能额外占用宽度，错误信息列需预留
+	markerMaxW := displayWidth(" [连续失败]")
+	errW = max(errW+markerMaxW, displayWidth("错误信息")+markerMaxW)
+
+	idW = min(idW, idMaxW)
+	descW = min(descW, descMaxW)
+	errW = min(errW, errMaxW+markerMaxW)
+
+	sepWidth := idW + 1 + descW + 1 + statusW + 1 + durW + 1 + errW
+
+	var sb strings.Builder
+	sb.WriteString("-" + strings.Repeat("-", sepWidth) + "\n")
+	sb.WriteString(fmt.Sprintf("%s %s %s %s %s\n",
+		padRight("ID", idW),
+		padRight("描述", descW),
+		padRight("状态", statusW),
+		padRight("耗时", durW),
+		padRight("错误信息", errW)))
+	sb.WriteString("-" + strings.Repeat("-", sepWidth) + "\n")
+
+	for _, r := range rows {
+		errCell := truncateDesc(r.err, errMaxW) + r.marker
+		sb.WriteString(fmt.Sprintf("%s %s %s %s %s\n",
+			padRight(truncateDesc(r.id, idMaxW), idW),
+			padRight(truncateDesc(r.desc, descMaxW), descW),
+			padRight(r.status, statusW),
+			padRight(r.durStr, durW),
+			padRight(errCell, errW)))
+	}
+	sb.WriteString("-" + strings.Repeat("-", sepWidth) + "\n")
+	return sb.String()
+}
+
 func GenerateTestReportContent(results []testcase.TestResult) string {
 	var sb strings.Builder
 
@@ -85,21 +172,7 @@ func GenerateTestReportContent(results []testcase.TestResult) string {
 
 	if len(aggregated) > 0 {
 		sb.WriteString("测试详情:\n")
-		sb.WriteString("-" + strings.Repeat("-", 78) + "\n")
-		sb.WriteString(fmt.Sprintf("%-15s %-40s %-10s %-15s %s\n", "ID", "描述", "状态", "耗时", "错误信息"))
-		sb.WriteString("-" + strings.Repeat("-", 78) + "\n")
-
-		for _, r := range aggregated {
-			if !r.Passed && !r.TestCase.Skip {
-				sb.WriteString(fmt.Sprintf("%-15s %-40s %-10s %-15v %s\n",
-					r.TestCase.ID,
-					r.TestCase.Desc,
-					"F",
-					r.Duration,
-					r.Error))
-			}
-		}
-		sb.WriteString("-" + strings.Repeat("-", 78) + "\n")
+		sb.WriteString(renderFailureTable(aggregated, false, nil))
 	}
 
 	sb.WriteString("\n===== 报告结束 =====\n")
@@ -366,25 +439,7 @@ func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFai
 	}
 	if hasFailures {
 		body.WriteString("失败详情:\n")
-		body.WriteString("-" + strings.Repeat("-", 78) + "\n")
-		body.WriteString(fmt.Sprintf("%-15s %-40s %-10s %-15s %s\n", "ID", "描述", "状态", "耗时", "错误信息"))
-		body.WriteString("-" + strings.Repeat("-", 78) + "\n")
-		for _, r := range aggregated {
-			if !r.Passed && !r.TestCase.Skip {
-				marker := ""
-				if alertIDs[r.TestCase.ID] {
-					marker = " [连续失败]"
-				}
-				body.WriteString(fmt.Sprintf("%-15s %-40s %-10s %-15v %s%s\n",
-					r.TestCase.ID,
-					r.TestCase.Desc,
-					"FAIL",
-					r.Duration,
-					r.Error,
-					marker))
-			}
-		}
-		body.WriteString("-" + strings.Repeat("-", 78) + "\n")
+		body.WriteString(renderFailureTable(aggregated, true, alertIDs))
 	}
 
 	if len(alerts) > 0 {
