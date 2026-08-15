@@ -49,12 +49,12 @@ func renderFailureTable(aggregated []testcase.TestResult, withMarker bool, alert
 	)
 
 	type failRow struct {
-		id      string
-		desc    string
-		status  string
-		durStr  string
-		err     string
-		marker  string
+		id     string
+		desc   string
+		status string
+		durStr string
+		err    string
+		marker string
 	}
 
 	var rows []failRow
@@ -282,7 +282,11 @@ func SendWeeklyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl 
 	logger.Debug("生成报告完成", zap.String("类型", "周报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送周报邮件",
 		zap.String("subject", subject))
-	return email.SendEmail(subject, body)
+	err = email.SendEmail(subject, body)
+	if err != nil {
+		logger.Error("发送周报邮件失败", zap.Error(err))
+	}
+	return err
 }
 
 func SendDailyReportEmail(consecutiveFailN int, topSlowN int) error {
@@ -307,7 +311,11 @@ func SendDailyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl R
 	logger.Debug("生成报告完成", zap.String("类型", "日报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送日报邮件",
 		zap.String("subject", subject))
-	return email.SendEmail(subject, body)
+	err = email.SendEmail(subject, body)
+	if err != nil {
+		logger.Error("发送日报邮件失败", zap.Error(err))
+	}
+	return err
 }
 
 func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
@@ -332,7 +340,11 @@ func SendMonthlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl
 	logger.Debug("生成报告完成", zap.String("类型", "月报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送月报邮件",
 		zap.String("subject", subject))
-	return email.SendEmail(subject, body)
+	err = email.SendEmail(subject, body)
+	if err != nil {
+		logger.Error("发送月报邮件失败", zap.Error(err))
+	}
+	return err
 }
 
 func SendYearlyReportEmail(consecutiveFailN int, topSlowN int) error {
@@ -357,7 +369,11 @@ func SendYearlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl 
 	logger.Debug("生成报告完成", zap.String("类型", "年报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送年报邮件",
 		zap.String("subject", subject))
-	return email.SendEmail(subject, body)
+	err = email.SendEmail(subject, body)
+	if err != nil {
+		logger.Error("发送年报邮件失败", zap.Error(err))
+	}
+	return err
 }
 
 func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFailN int, topSlowN int) error {
