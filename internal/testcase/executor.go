@@ -66,6 +66,7 @@ func findTestCaseByID(id string) *psv.TestCase {
 }
 
 func executePreConditions(ctx context.Context, preIDs []string) (TestResult, error) {
+	logger.Debug("开始执行前置条件", zap.Int("前置数量", len(preIDs)), zap.Any("前置ID列表", preIDs))
 	for _, preID := range preIDs {
 		if ctx.Err() != nil {
 			return TestResult{}, ctx.Err()
@@ -78,15 +79,19 @@ func executePreConditions(ctx context.Context, preIDs []string) (TestResult, err
 			return TestResult{}, fmt.Errorf("%s", errMsg)
 		}
 
-		fmt.Printf("[前置条件] 执行: %s - %s\n", preTC.ID, preTC.Desc)
+		logger.Debug("执行前置条件",
+			zap.String("前置ID", preID),
+			zap.String("方法", preTC.Method),
+			zap.String("URL", preTC.URL))
 		preResult := ExecuteTestCaseWithContext(ctx, *preTC)
 		if !preResult.Passed {
 			errMsg := fmt.Sprintf("前置条件失败: %s - %s", preID, preResult.Error)
 			logger.Error(errMsg)
 			return preResult, fmt.Errorf("%s", errMsg)
 		}
-		fmt.Printf("[前置条件] ✅ 成功\n")
+		logger.Debug("前置条件执行成功", zap.String("前置ID", preID), zap.Duration("耗时", preResult.Duration))
 	}
+	logger.Debug("所有前置条件执行完成", zap.Int("数量", len(preIDs)))
 	return TestResult{}, nil
 }
 
@@ -130,6 +135,7 @@ func isVariableUsed(varName string) bool {
 }
 
 func executePostConditions(ctx context.Context, postIDs []string) {
+	logger.Debug("开始执行后置条件", zap.Int("后置数量", len(postIDs)), zap.Any("后置ID列表", postIDs))
 	for _, postID := range postIDs {
 		if ctx.Err() != nil {
 			logger.Warn("后置条件执行被取消", zap.Error(ctx.Err()))
@@ -142,15 +148,20 @@ func executePostConditions(ctx context.Context, postIDs []string) {
 			continue
 		}
 
-		fmt.Printf("[后置条件] 执行: %s - %s\n", postTC.ID, postTC.Desc)
+		logger.Debug("执行后置条件",
+			zap.String("后置ID", postID),
+			zap.String("方法", postTC.Method),
+			zap.String("URL", postTC.URL))
 		postResult := ExecuteTestCaseWithContext(ctx, *postTC)
 		if !postResult.Passed {
 			fmt.Printf("[后置条件] ❌ 失败: %s\n", postResult.Error)
 			logger.Warn(fmt.Sprintf("后置条件失败: %s - %s", postID, postResult.Error))
 		} else {
+			logger.Debug("后置条件执行成功", zap.String("后置ID", postID), zap.Duration("耗时", postResult.Duration))
 			fmt.Printf("[后置条件] ✅ 成功\n")
 		}
 	}
+	logger.Debug("所有后置条件执行完成", zap.Int("数量", len(postIDs)))
 }
 
 func finishTestCase(ctx context.Context, tc psv.TestCase, result TestResult, startTime time.Time) TestResult {
@@ -230,6 +241,15 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 	}
 
 	logger.Info("正在执行测试", zap.String("用例ID", tc.ID), zap.String("描述", tc.Desc))
+	logger.Debug("测试用例详情",
+		zap.String("用例ID", tc.ID),
+		zap.String("方法", tc.Method),
+		zap.String("URL", tc.URL),
+		zap.Int("前置条件数", len(tc.Pre)),
+		zap.Int("后置条件数", len(tc.Post)),
+		zap.Int("延迟毫秒", tc.DelayAfterMs),
+		zap.Bool("跳过", tc.Skip),
+		zap.String("失败模式", tc.FailMode))
 
 	if tc.Skip {
 		logger.Info("跳过测试", zap.String("用例ID", tc.ID))
@@ -279,20 +299,23 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 	processedBody := vars.Replace(tc.Body)
 	processedJSON := vars.Replace(tc.JSON)
 
-	logger.Info("变量替换后",
+	logger.Debug("变量替换后",
 		zap.String("processedURL", processedURL),
-		zap.Any("processedHeaders", processedHeaders),
-		zap.String("processedBody", processedBody),
-		zap.String("processedJSON", processedJSON))
-	logger.Info("当前全局变量", zap.Any("变量", vars.GetAll()))
+		zap.Int("处理后Headers数", len(processedHeaders)),
+		zap.Int("处理后Body长度", len(processedBody)),
+		zap.Int("处理后JSON长度", len(processedJSON)))
+	logger.Debug("当前全局变量快照", zap.Any("变量", vars.GetAll()))
 
 	var requestBody string
 	if tc.JSON != "" {
 		requestBody = processedJSON
+		logger.Debug("使用 JSON 请求体", zap.String("用例ID", tc.ID), zap.Int("字节数", len(requestBody)))
 	} else if tc.Body != "" {
 		requestBody = processedBody
+		logger.Debug("使用 Body 请求体", zap.String("用例ID", tc.ID), zap.Int("字节数", len(requestBody)))
 	} else if tc.Payload != "" {
 		requestBody = vars.Replace(tc.Payload)
+		logger.Debug("使用 Payload 请求体", zap.String("用例ID", tc.ID), zap.Int("字节数", len(requestBody)))
 	} else if len(tc.Form) > 0 {
 		formData := make(map[string]string)
 		for k, v := range tc.Form {
@@ -300,6 +323,7 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 		}
 		formJSON, _ := json.Marshal(formData)
 		requestBody = string(formJSON)
+		logger.Debug("使用 Form 请求体", zap.String("用例ID", tc.ID), zap.Int("字段数", len(formData)))
 	}
 
 	headersJSON, _ := json.Marshal(processedHeaders)
@@ -316,11 +340,13 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 	}
 
 	if hasFileField(tc.Form) {
+		logger.Debug("检测到文件上传字段", zap.String("用例ID", tc.ID))
 		formData := make(map[string]string)
 		for k, v := range tc.Form {
 			v = vars.Replace(v)
 			if strings.HasPrefix(v, "@") || strings.HasPrefix(v, "file://") {
 				filePath := strings.TrimPrefix(strings.TrimPrefix(v, "@"), "file://")
+				logger.Debug("上传文件", zap.String("字段", k), zap.String("路径", filePath))
 				req.SetFile(k, filePath)
 			} else {
 				formData[k] = v
@@ -348,6 +374,13 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 	var resp *resty.Response
 	var err error
 
+	logger.Debug("发起 HTTP 请求",
+		zap.String("用例ID", tc.ID),
+		zap.String("Method", tc.Method),
+		zap.String("URL", processedURL),
+		zap.Int("Header数", len(processedHeaders)),
+		zap.Int("QueryParam数", len(tc.Params)))
+
 	switch tc.Method {
 	case http.MethodGet:
 		resp, err = req.Get(processedURL)
@@ -363,6 +396,7 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 		resp, err = req.Head(processedURL)
 	default:
 		err = fmt.Errorf("不支持的 HTTP 方法: %s", tc.Method)
+		logger.Error("不支持的 HTTP 方法", zap.String("方法", tc.Method))
 	}
 
 	if err != nil {
@@ -372,33 +406,61 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 			result.Error = err.Error()
 		}
 		result.Passed = false
+		logger.Error("HTTP 请求失败",
+			zap.String("用例ID", tc.ID),
+			zap.String("方法", tc.Method),
+			zap.String("URL", processedURL),
+			zap.Error(err))
 		return finishTestCase(ctx, tc, result, startTime)
 	}
 
 	result.ResponseBody = cleaner.CompressResponseBody(string(resp.Body()))
 	result.ActualStatus = resp.StatusCode()
 
+	logger.Debug("HTTP 响应已接收",
+		zap.String("用例ID", tc.ID),
+		zap.Int("状态码", resp.StatusCode()),
+		zap.Int("响应字节数", len(resp.Body())),
+		zap.Duration("耗时", time.Since(startTime)))
+
 	if tc.StreamMode {
+		logger.Debug("使用流式响应模式", zap.String("用例ID", tc.ID))
 		result = executeStreamAssertWithContext(ctx, tc, resp, startTime)
 	} else {
 		if tc.ExpectedStatus > 0 && resp.StatusCode() != tc.ExpectedStatus {
 			result.Error = fmt.Sprintf("期望状态码 %d，实际 %d", tc.ExpectedStatus, resp.StatusCode())
 			result.Passed = false
+			logger.Warn("状态码断言失败",
+				zap.String("用例ID", tc.ID),
+				zap.Int("期望", tc.ExpectedStatus),
+				zap.Int("实际", resp.StatusCode()))
 			return finishTestCase(ctx, tc, result, startTime)
 		}
 
 		if tc.BodyRegex != "" {
+			logger.Debug("执行正则匹配断言",
+				zap.String("用例ID", tc.ID),
+				zap.String("正则", tc.BodyRegex))
 			if ok, errMsg := assert.BodyRegexMatch(result.ResponseBody, tc.BodyRegex); !ok {
 				result.Error = errMsg
 				result.Passed = false
+				logger.Warn("正则断言失败",
+					zap.String("用例ID", tc.ID),
+					zap.String("错误", errMsg))
 				return finishTestCase(ctx, tc, result, startTime)
 			}
 		}
 
 		if tc.ExpectedBody != "" {
+			logger.Debug("执行 JSON 断言",
+				zap.String("用例ID", tc.ID),
+				zap.String("匹配模式", tc.MatchMode))
 			if ok, errMsg := assert.JSONMatch(vars.Replace(tc.ExpectedBody), result.ResponseBody, tc.MatchMode); !ok {
 				result.Error = errMsg
 				result.Passed = false
+				logger.Warn("JSON 断言失败",
+					zap.String("用例ID", tc.ID),
+					zap.String("错误", errMsg))
 				return finishTestCase(ctx, tc, result, startTime)
 			}
 		}
@@ -416,6 +478,8 @@ func ExecuteTestCaseWithContext(ctx context.Context, tc psv.TestCase) TestResult
 			extractedVarsJSON, _ := json.Marshal(extractedVars)
 			result.ExtractedVars = string(extractedVarsJSON)
 			logger.Info("已提取变量", zap.String("用例ID", tc.ID), zap.Any("变量", extractedVars))
+		} else {
+			logger.Warn("变量提取失败", zap.String("用例ID", tc.ID), zap.Error(err))
 		}
 	}
 
@@ -829,13 +893,33 @@ func FilterByTags(testCases []psv.TestCase, tags []string) []psv.TestCase {
 // testCases: 测试用例列表
 // 返回: 测试结果列表
 func RunParallel(testCases []psv.TestCase) []TestResult {
+	logger.Info("开始串行执行测试", zap.Int("用例数", len(testCases)))
 	var results []TestResult
+	startAll := time.Now()
 
-	for _, tc := range testCases {
+	for i, tc := range testCases {
+		logger.Debug("执行测试用例进度", zap.Int("当前", i+1), zap.Int("总数", len(testCases)), zap.String("用例ID", tc.ID))
 		result := ExecuteTestCase(tc)
 		results = append(results, result)
 	}
 
+	totalDuration := time.Since(startAll)
+	passedCount, failedCount, skippedCount := 0, 0, 0
+	for _, r := range results {
+		if r.TestCase.Skip {
+			skippedCount++
+		} else if r.Passed {
+			passedCount++
+		} else {
+			failedCount++
+		}
+	}
+	logger.Info("批量测试执行完成",
+		zap.Int("总数", len(testCases)),
+		zap.Int("通过", passedCount),
+		zap.Int("失败", failedCount),
+		zap.Int("跳过", skippedCount),
+		zap.Duration("总耗时", totalDuration))
 	return results
 }
 
@@ -957,6 +1041,11 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 	}
 
 	reportDir := config.GetConfig().Test.ReportDir
+	logger.Debug("准备保存测试报告",
+		zap.String("目录", reportDir),
+		zap.String("时间戳", ts),
+		zap.Int("全量报告字节", len(allReport)),
+		zap.Int("错误报告字节", len(errorReport)))
 
 	// 创建报告目录
 	if err := os.MkdirAll(reportDir, 0755); err != nil {
@@ -968,6 +1057,8 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 	allPath := fmt.Sprintf("%s/report_%s.csv", reportDir, ts)
 	if err := os.WriteFile(allPath, []byte(allReport), 0644); err != nil {
 		logger.Error("保存报告失败", zap.Error(err))
+	} else {
+		logger.Debug("全量报告已写入", zap.String("路径", allPath), zap.Int("字节数", len(allReport)))
 	}
 
 	// 保存错误报告（如果有失败的测试）
@@ -976,6 +1067,8 @@ func SaveReports(allReport, errorReport string, timestamp ...string) (string, st
 		errorPath = fmt.Sprintf("%s/report_%s_error.csv", reportDir, ts)
 		if err := os.WriteFile(errorPath, []byte(errorReport), 0644); err != nil {
 			logger.Error("保存错误报告失败", zap.Error(err))
+		} else {
+			logger.Debug("错误报告已写入", zap.String("路径", errorPath), zap.Int("字节数", len(errorReport)))
 		}
 	}
 

@@ -65,6 +65,7 @@ type TestCase struct {
 // filePath: 文件路径
 // 返回: 测试用例列表和错误信息
 func ParseFile(filePath string) ([]TestCase, error) {
+	logger.Debug("开始解析 PSV 文件", zap.String("路径", filePath))
 	file, err := os.Open(filePath)
 	if err != nil {
 		logger.Error("打开 PSV 文件失败", zap.String("路径", filePath), zap.Error(err))
@@ -79,6 +80,7 @@ func ParseFile(filePath string) ([]TestCase, error) {
 // paths: 文件或目录路径列表
 // 返回: 所有测试用例列表和错误信息
 func ParseFiles(paths []string) ([]TestCase, error) {
+	logger.Debug("批量解析 PSV 路径", zap.Any("路径列表", paths))
 	var allCases []TestCase
 	for _, path := range paths {
 		files, err := expandPath(path)
@@ -86,6 +88,7 @@ func ParseFiles(paths []string) ([]TestCase, error) {
 			logger.Warn("展开路径失败", zap.String("路径", path), zap.Error(err))
 			continue
 		}
+		logger.Debug("路径展开结果", zap.String("路径", path), zap.Int("文件数", len(files)))
 
 		for _, file := range files {
 			cases, err := ParseFile(file)
@@ -93,9 +96,11 @@ func ParseFiles(paths []string) ([]TestCase, error) {
 				logger.Error("解析 PSV 文件失败", zap.String("路径", file), zap.Error(err))
 				continue
 			}
+			logger.Debug("PSV 文件解析成功", zap.String("路径", file), zap.Int("用例数", len(cases)))
 			allCases = append(allCases, cases...)
 		}
 	}
+	logger.Info("批量解析完成", zap.Int("总用例数", len(allCases)))
 	return allCases, nil
 }
 
@@ -106,14 +111,19 @@ func ParseFiles(paths []string) ([]TestCase, error) {
 func expandPath(path string) ([]string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		files, err := doublestar.Glob(os.DirFS("."), path)
-		if err != nil {
-			return nil, err
-		}
+		logger.Debug("路径不存在，尝试通配符匹配", zap.String("路径", path), zap.Error(err))
+	}
+
+	files, err := filepath.Glob(path)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debug("通配符匹配结果", zap.String("路径", path), zap.Int("匹配数", len(files)))
 		return files, nil
 	}
 
 	if info.IsDir() {
+		logger.Debug("扫描目录中的 PSV/CSV 文件", zap.String("目录", path))
 		matches, err := doublestar.Glob(os.DirFS(path), "**/*.{psv,csv}")
 		if err != nil {
 			return nil, err
@@ -122,8 +132,10 @@ func expandPath(path string) ([]string, error) {
 		for _, match := range matches {
 			files = append(files, filepath.Join(path, match))
 		}
+		logger.Debug("目录扫描完成", zap.String("目录", path), zap.Int("找到文件数", len(files)))
 		return files, nil
 	}
+	logger.Debug("解析单个文件", zap.String("路径", path))
 	return []string{path}, nil
 }
 
@@ -138,6 +150,7 @@ func parseReader(reader io.Reader, filePath string) ([]TestCase, error) {
 	lineNum := 0
 
 	fileName := filepath.Base(filePath)
+	skippedLines := 0
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -145,12 +158,17 @@ func parseReader(reader io.Reader, filePath string) ([]TestCase, error) {
 
 		// 跳过空行和注释行
 		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
+			skippedLines++
 			continue
 		}
 
 		// 第一行是表头
 		if lineNum == 1 {
 			header = parseLine(line)
+			logger.Debug("解析 PSV 表头",
+				zap.String("文件", filePath),
+				zap.Int("字段数", len(header)),
+				zap.Any("字段", header))
 			continue
 		}
 
@@ -169,7 +187,11 @@ func parseReader(reader io.Reader, filePath string) ([]TestCase, error) {
 		return nil, err
 	}
 
-	logger.Info("成功解析 PSV 文件", zap.String("路径", filePath), zap.Int("数量", len(testCases)))
+	logger.Info("成功解析 PSV 文件",
+		zap.String("路径", filePath),
+		zap.Int("用例数", len(testCases)),
+		zap.Int("跳过行数", skippedLines),
+		zap.Int("总行数", lineNum))
 	return testCases, nil
 }
 
@@ -258,8 +280,9 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 			tc.StreamMode = value == "1" || strings.EqualFold(value, "true")
 		case "stream_assert":
 			if value != "" {
-				json.Unmarshal([]byte(value), &tc.StreamAssert)
-			}
+				if err := json.Unmarshal([]byte(value), &tc.StreamAssert); err != nil {
+					logger.Warn("解析流式断言字段失败", zap.String("原始值", value), zap.Error(err))
+				}
 		case "match_mode":
 			tc.MatchMode = value
 		case "body_regex":
@@ -282,12 +305,24 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 	// 如果没有指定ID，自动生成
 	if tc.ID == "" {
 		tc.ID = generateID(tc)
+		logger.Debug("自动生成测试用例 ID", zap.String("生成ID", tc.ID), zap.String("URL", tc.URL))
 	}
 
 	// 如果没有指定method，默认为GET
 	if tc.Method == "" {
 		tc.Method = "GET"
 	}
+
+	logger.Debug("PSV 字段映射完成",
+		zap.String("ID", tc.ID),
+		zap.String("方法", tc.Method),
+		zap.String("URL", tc.URL),
+		zap.Int("头字段数", len(tc.Headers)),
+		zap.Int("参数数", len(tc.Params)),
+		zap.Int("表单字段数", len(tc.Form)),
+		zap.Bool("流式", tc.StreamMode),
+		zap.Int("前置数", len(tc.Pre)),
+		zap.Int("后置数", len(tc.Post)))
 
 	return tc, nil
 }

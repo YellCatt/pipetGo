@@ -60,11 +60,13 @@ func (c *Cleaner) Start() error {
 	c.running = true
 	interval := time.Duration(c.config.IntervalHours) * time.Hour
 	logger.Info("启动清理器",
-		zap.Int("retention_days", c.config.RetentionDays),
-		zap.String("log_dir", c.config.LogDir),
-		zap.String("report_dir", c.config.ReportDir),
-		zap.String("data_dir", c.config.DataDir),
-		zap.Int("interval_hours", c.config.IntervalHours))
+		zap.Int("保留天数", c.config.RetentionDays),
+		zap.String("日志目录", c.config.LogDir),
+		zap.String("报告目录", c.config.ReportDir),
+		zap.String("数据目录", c.config.DataDir),
+		zap.Int("间隔小时", c.config.IntervalHours),
+		zap.Any("包含模式", c.config.IncludePatterns),
+		zap.Any("排除模式", c.config.ExcludePatterns))
 
 	// 立即执行一次清理
 	go c.cleanup()
@@ -74,9 +76,11 @@ func (c *Cleaner) Start() error {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
+		logger.Debug("清理器定时循环已启动", zap.Duration("间隔", interval))
 		for {
 			select {
-			case <-ticker.C:
+			case t := <-ticker.C:
+				logger.Debug("清理器定时触发", zap.Time("时间", t))
 				c.cleanup()
 			case <-c.stopChan:
 				logger.Info("清理器已停止")
@@ -93,6 +97,7 @@ func (c *Cleaner) Stop() {
 	if !c.running {
 		return
 	}
+	logger.Debug("停止清理器")
 	c.running = false
 	close(c.stopChan)
 }
@@ -123,35 +128,44 @@ func (c *Cleaner) setDefaults() {
 func (c *Cleaner) cleanup() error {
 	logger.Info("开始执行清理任务")
 	threshold := timeutil.Now().Add(-time.Duration(c.config.RetentionDays) * 24 * time.Hour)
+	logger.Debug("清理阈值计算",
+		zap.Int("保留天数", c.config.RetentionDays),
+		zap.Time("阈值时间", threshold))
 
 	totalDeleted := 0
 
 	// 清理日志目录
 	if c.config.LogDir != "" {
+		logger.Debug("清理日志目录", zap.String("路径", c.config.LogDir))
 		count, err := c.cleanupDirectory(c.config.LogDir, threshold)
 		if err != nil {
 			logger.Error("清理日志目录失败", zap.String("目录", c.config.LogDir), zap.Error(err))
 		} else {
+			logger.Debug("日志目录清理完成", zap.Int("删除数", count))
 			totalDeleted += count
 		}
 	}
 
 	// 清理报告目录
 	if c.config.ReportDir != "" {
+		logger.Debug("清理报告目录", zap.String("路径", c.config.ReportDir))
 		count, err := c.cleanupDirectory(c.config.ReportDir, threshold)
 		if err != nil {
 			logger.Error("清理报告目录失败", zap.String("目录", c.config.ReportDir), zap.Error(err))
 		} else {
+			logger.Debug("报告目录清理完成", zap.Int("删除数", count))
 			totalDeleted += count
 		}
 	}
 
 	// 清理数据目录
 	if c.config.DataDir != "" {
+		logger.Debug("清理数据目录", zap.String("路径", c.config.DataDir))
 		count, err := c.cleanupDirectory(c.config.DataDir, threshold)
 		if err != nil {
 			logger.Error("清理数据目录失败", zap.String("目录", c.config.DataDir), zap.Error(err))
 		} else {
+			logger.Debug("数据目录清理完成", zap.Int("删除数", count))
 			totalDeleted += count
 		}
 	}
@@ -168,37 +182,50 @@ func (c *Cleaner) cleanupDirectory(dir string, threshold time.Time) (int, error)
 	}
 
 	count := 0
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	scanned := 0
+	matchedInclude := 0
+	var err error
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			logger.Warn("遍历清理目录出错", zap.String("路径", path), zap.Error(walkErr))
+			return walkErr
 		}
 
 		if info.IsDir() {
 			return nil
 		}
 
+		scanned++
+
 		// 检查文件模式过滤
 		if !c.matchesIncludePatterns(path) {
 			return nil
 		}
+		matchedInclude++
 
 		if c.matchesExcludePatterns(path) {
+			logger.Debug("文件匹配排除模式，跳过", zap.String("路径", path))
 			return nil
 		}
 
 		// 检查文件修改时间
 		if info.ModTime().Before(threshold) {
-			if err := os.Remove(path); err != nil {
-				logger.Warn("删除文件失败", zap.String("路径", path), zap.Error(err))
-				return err
+			if rmErr := os.Remove(path); rmErr != nil {
+				logger.Warn("删除文件失败", zap.String("路径", path), zap.Error(rmErr))
+				return rmErr
 			}
 			count++
-			logger.Info("已删除旧文件", zap.String("路径", path), zap.Time("修改时间", info.ModTime()))
+			logger.Info("已删除旧文件", zap.String("路径", path), zap.Time("修改时间", info.ModTime()), zap.Int64("大小", info.Size()))
 		}
 
 		return nil
 	})
 
+	logger.Debug("目录扫描完成",
+		zap.String("目录", dir),
+		zap.Int("扫描文件数", scanned),
+		zap.Int("匹配包含模式数", matchedInclude),
+		zap.Int("删除数", count))
 	return count, err
 }
 

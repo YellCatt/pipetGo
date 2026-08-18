@@ -39,6 +39,11 @@ type LogConfig struct {
 func InitLogger(cfg LogConfig) {
 	logLevel = zap.NewAtomicLevelAt(getLogLevel(cfg.Level))
 
+	logger.Debug("初始化日志系统",
+		zap.String("级别", cfg.Level),
+		zap.String("编码", cfg.Encoding),
+		zap.String("输出", cfg.Output))
+
 	var encoder zapcore.Encoder
 	var encoderCfg zapcore.EncoderConfig
 
@@ -60,6 +65,7 @@ func InitLogger(cfg LogConfig) {
 
 	if cfg.Output == "stdout" || cfg.Output == "" {
 		core = zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), logLevel)
+		logger.Info("日志输出到 stdout")
 	} else {
 		writer, err := newRotateWriter(cfg.Output, defaultMaxSize)
 		if err != nil {
@@ -67,10 +73,14 @@ func InitLogger(cfg LogConfig) {
 			os.Exit(1)
 		}
 		core = zapcore.NewCore(encoder, writer, logLevel)
+		logger.Info("日志输出到文件",
+			zap.String("路径", cfg.Output),
+			zap.Int64("单文件上限MB", defaultMaxSize/(1024*1024)))
 	}
 
 	log = zap.New(core, zap.AddCaller())
 	zap.ReplaceGlobals(log)
+	logger.Info("日志系统初始化完成", zap.String("级别", cfg.Level))
 }
 
 // rotateWriter 实现日期 + 文件大小双重滚动
@@ -147,6 +157,7 @@ func (w *rotateWriter) openFile(idx int) error {
 	w.file = f
 	w.fileSize = info.Size()
 	w.currentIdx = idx
+	fmt.Fprintf(os.Stderr, "[日志滚动器] 打开日志文件 路径=%s 大小=%d\n", fullPath, w.fileSize)
 	return nil
 }
 
@@ -159,6 +170,7 @@ func (w *rotateWriter) Write(p []byte) (int, error) {
 	day := timeutil.Format(now, "20060102")
 
 	if day != w.currentDay {
+		fmt.Fprintf(os.Stderr, "[日志滚动器] 日志日期切换触发滚动 旧日期=%s 新日期=%s\n", w.currentDay, day)
 		if err := w.rotate(now, true); err != nil {
 			return 0, err
 		}
@@ -166,6 +178,8 @@ func (w *rotateWriter) Write(p []byte) (int, error) {
 
 	if w.fileSize+int64(len(p)) > w.maxSize {
 		nextIdx := w.currentIdx + 1
+		fmt.Fprintf(os.Stderr, "[日志滚动器] 日志文件达到大小上限，切换分片 当前分片=%d 新分片=%d 当前大小=%d 待写入=%d 上限=%d\n",
+			w.currentIdx, nextIdx, w.fileSize, len(p), w.maxSize)
 		if err := w.openFile(nextIdx); err != nil {
 			return 0, err
 		}
@@ -235,7 +249,7 @@ func getLogLevel(level string) zapcore.Level {
 // UpdateLevel 动态更新日志级别（用于配置热加载）
 func UpdateLevel(level string) {
 	logLevel.SetLevel(getLogLevel(level))
-	Info("日志级别已动态更新", zap.String("level", level))
+	Info("日志级别已动态更新", zap.String("级别", level))
 }
 
 // l 返回当前 logger，若未初始化则回退到 zap 全局 logger

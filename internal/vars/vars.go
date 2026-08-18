@@ -26,6 +26,7 @@ func Set(key, value string) {
 	varsMu.Lock()
 	defer varsMu.Unlock()
 	vars[key] = value
+	logger.Debug("设置变量", zap.String("变量名", key), zap.String("变量值", maskValue(value)))
 }
 
 // Get 获取全局变量
@@ -99,4 +100,5 @@ func InitFromConfig(config map[string]string) {
 	for k, v := range config {
 		vars[k] = v
 	}
+	logger.Debug("从配置初始化变量", zap.Int("数量", len(config)))
 }

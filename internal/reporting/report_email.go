@@ -16,18 +16,26 @@ import (
 
 func canSendEmail() bool {
 	cfg := email.GetConfig()
+	logger.Debug("检查邮件配置",
+		zap.Bool("启用", cfg.Enabled),
+		zap.String("发件人", cfg.FromEmail),
+		zap.Int("收件人数", len(cfg.ToEmail)),
+		zap.Bool("有授权码", cfg.AuthCode != ""),
+		zap.String("SMTP服务器", cfg.SMTPServer),
+		zap.Int("SMTP端口", cfg.SMTPPort))
 	if !cfg.Enabled {
 		logger.Warn("邮件发送功能已禁用")
 		return false
 	}
 	if cfg.FromEmail == "" || len(cfg.ToEmail) == 0 || cfg.AuthCode == "" {
 		logger.Warn("邮件配置不完整",
-			zap.Bool("enabled", cfg.Enabled),
-			zap.String("from", cfg.FromEmail),
-			zap.Int("to_count", len(cfg.ToEmail)),
-			zap.Bool("has_auth", cfg.AuthCode != ""))
+			zap.Bool("是否启用", cfg.Enabled),
+			zap.String("发件人", cfg.FromEmail),
+			zap.Int("收件人数", len(cfg.ToEmail)),
+			zap.Bool("是否有授权码", cfg.AuthCode != ""))
 		return false
 	}
+	logger.Debug("邮件配置检查通过")
 	return true
 }
 
@@ -130,6 +138,9 @@ func GenerateTestReportContent(results []testcase.TestResult) string {
 
 	now := timeutil.Now()
 
+	logger.Debug("生成测试报告内容",
+		zap.Int("结果数", len(results)))
+
 	sb.WriteString(fmt.Sprintf("===== 测试报告 =====\n\n"))
 	sb.WriteString(fmt.Sprintf("执行时间: %s\n", timeutil.FormatDateTime(now)))
 	sb.WriteString(fmt.Sprintf("测试设备: %s\n", email.GetDeviceName()))
@@ -190,8 +201,8 @@ func SendTestReportEmail(results []testcase.TestResult) error {
 	body := GenerateTestReportContent(results)
 
 	logger.Info("开始发送测试报告邮件",
-		zap.String("subject", subject),
-		zap.Int("result_count", len(results)))
+		zap.String("主题", subject),
+		zap.Int("结果数", len(results)))
 	return email.SendEmail(subject, body)
 }
 
@@ -212,7 +223,7 @@ func SendErrorReportEmail(errorMessage string) error {
 	body.WriteString("来自 pipetGo 测试程序")
 
 	logger.Info("开始发送异常报告邮件",
-		zap.String("subject", subject))
+		zap.String("主题", subject))
 	return email.SendEmail(subject, body.String())
 }
 
@@ -255,8 +266,8 @@ func SendTestStartEmail(testCaseCount, chainCount, independentCount int, estimat
 	body.WriteString("来自 pipetGo 测试程序")
 
 	logger.Info("开始发送测试开始通知邮件",
-		zap.String("subject", subject),
-		zap.Int("total_cases", testCaseCount))
+		zap.String("主题", subject),
+		zap.Int("用例总数", testCaseCount))
 	return email.SendEmail(subject, body.String())
 }
 
@@ -265,26 +276,44 @@ func SendWeeklyReportEmail(consecutiveFailN int, topSlowN int) error {
 }
 
 func SendWeeklyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl ReportTemplate) error {
+	logger.Debug("开始准备发送周报邮件",
+		zap.Int("连续失败阈值", consecutiveFailN),
+		zap.Int("慢接口上限", topSlowN),
+		zap.Bool("模板显示汇总", tmpl.ShowSummary),
+		zap.Bool("模板显示增长", tmpl.ShowGrowth),
+		zap.Bool("模板显示错误率", tmpl.ShowError),
+		zap.Bool("模板显示慢接口", tmpl.ShowSlow),
+		zap.Bool("模板显示告警", tmpl.ShowAlert))
+
 	if !canSendEmail() {
+		logger.Warn("周报邮件未发送: 邮件发送功能未启用或配置不完整")
 		return nil
 	}
 
+	logger.Debug("邮件配置检查通过，开始生成周报")
 	report, err := GenerateWeekReportWithTemplate(email.GetDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
 		logger.Error("生成周报失败", zap.Error(err))
 		return err
 	}
 
+	logger.Debug("周报生成完成",
+		zap.String("周期", report.StartDate+" ~ "+report.EndDate),
+		zap.Int("日汇总条数", len(report.DailyStats)),
+		zap.Int("慢接口条数", len(report.SlowCases)),
+		zap.Int("告警条数", len(report.AlertCases)))
+
 	subject := fmt.Sprintf("【测试周报】pipetGo - %s (%s ~ %s)", email.GetDeviceName(), report.StartDate, report.EndDate)
 	body := report.FormatWeekReport()
 
-	// 调试日志：报告已生成，记录类型与关键阈值；body_len 可用于判断内容是否为空
-	logger.Debug("生成报告完成", zap.String("类型", "周报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
+	logger.Debug("周报格式化完成", zap.String("类型", "周报"), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送周报邮件",
-		zap.String("subject", subject))
+		zap.String("主题", subject))
 	err = email.SendEmail(subject, body)
 	if err != nil {
 		logger.Error("发送周报邮件失败", zap.Error(err))
+	} else {
+		logger.Info("周报邮件发送成功", zap.String("主题", subject))
 	}
 	return err
 }
@@ -294,26 +323,45 @@ func SendDailyReportEmail(consecutiveFailN int, topSlowN int) error {
 }
 
 func SendDailyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl ReportTemplate) error {
+	logger.Debug("开始准备发送日报邮件",
+		zap.Int("连续失败阈值", consecutiveFailN),
+		zap.Int("慢接口上限", topSlowN),
+		zap.Bool("模板显示汇总", tmpl.ShowSummary),
+		zap.Bool("模板显示增长", tmpl.ShowGrowth),
+		zap.Bool("模板显示错误率", tmpl.ShowError),
+		zap.Bool("模板显示慢接口", tmpl.ShowSlow),
+		zap.Bool("模板显示告警", tmpl.ShowAlert))
+
 	if !canSendEmail() {
+		logger.Warn("日报邮件未发送: 邮件发送功能未启用或配置不完整")
 		return nil
 	}
 
+	logger.Debug("邮件配置检查通过，开始生成日报")
 	report, err := GenerateDayReportWithTemplate(email.GetDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
 		logger.Error("生成日报失败", zap.Error(err))
 		return err
 	}
 
+	logger.Debug("日报生成完成",
+		zap.String("日期", report.Date),
+		zap.Int("当日汇总条数", len(report.DailyStats)),
+		zap.Int("趋势数据条数", len(report.TrendStats)),
+		zap.Int("慢接口条数", len(report.SlowCases)),
+		zap.Int("告警条数", len(report.AlertCases)))
+
 	subject := fmt.Sprintf("【测试日报】pipetGo - %s (%s)", email.GetDeviceName(), report.Date)
 	body := report.FormatDayReport()
 
-	// 调试日志：报告已生成，记录类型与关键阈值；body_len 可用于判断内容是否为空
-	logger.Debug("生成报告完成", zap.String("类型", "日报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
+	logger.Debug("日报格式化完成", zap.String("类型", "日报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送日报邮件",
-		zap.String("subject", subject))
+		zap.String("主题", subject))
 	err = email.SendEmail(subject, body)
 	if err != nil {
 		logger.Error("发送日报邮件失败", zap.Error(err))
+	} else {
+		logger.Info("日报邮件发送成功", zap.String("主题", subject))
 	}
 	return err
 }
@@ -323,26 +371,44 @@ func SendMonthlyReportEmail(consecutiveFailN int, topSlowN int) error {
 }
 
 func SendMonthlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl ReportTemplate) error {
+	logger.Debug("开始准备发送月报邮件",
+		zap.Int("连续失败阈值", consecutiveFailN),
+		zap.Int("慢接口上限", topSlowN),
+		zap.Bool("模板显示汇总", tmpl.ShowSummary),
+		zap.Bool("模板显示增长", tmpl.ShowGrowth),
+		zap.Bool("模板显示错误率", tmpl.ShowError),
+		zap.Bool("模板显示慢接口", tmpl.ShowSlow),
+		zap.Bool("模板显示告警", tmpl.ShowAlert))
+
 	if !canSendEmail() {
+		logger.Warn("月报邮件未发送: 邮件发送功能未启用或配置不完整")
 		return nil
 	}
 
+	logger.Debug("邮件配置检查通过，开始生成月报")
 	report, err := GenerateMonthReportWithTemplate(email.GetDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
 		logger.Error("生成月报失败", zap.Error(err))
 		return err
 	}
 
+	logger.Debug("月报生成完成",
+		zap.String("周期", report.StartDate+" ~ "+report.EndDate),
+		zap.Int("日汇总条数", len(report.DailyStats)),
+		zap.Int("慢接口条数", len(report.SlowCases)),
+		zap.Int("告警条数", len(report.AlertCases)))
+
 	subject := fmt.Sprintf("【测试月报】pipetGo - %s (%s ~ %s)", email.GetDeviceName(), report.StartDate, report.EndDate)
 	body := report.FormatMonthReport()
 
-	// 调试日志：报告已生成，记录类型与关键阈值；body_len 可用于判断内容是否为空
-	logger.Debug("生成报告完成", zap.String("类型", "月报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
+	logger.Debug("月报格式化完成", zap.String("类型", "月报"), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送月报邮件",
-		zap.String("subject", subject))
+		zap.String("主题", subject))
 	err = email.SendEmail(subject, body)
 	if err != nil {
 		logger.Error("发送月报邮件失败", zap.Error(err))
+	} else {
+		logger.Info("月报邮件发送成功", zap.String("主题", subject))
 	}
 	return err
 }
@@ -352,26 +418,44 @@ func SendYearlyReportEmail(consecutiveFailN int, topSlowN int) error {
 }
 
 func SendYearlyReportEmailWithTemplate(consecutiveFailN int, topSlowN int, tmpl ReportTemplate) error {
+	logger.Debug("开始准备发送年报邮件",
+		zap.Int("连续失败阈值", consecutiveFailN),
+		zap.Int("慢接口上限", topSlowN),
+		zap.Bool("模板显示汇总", tmpl.ShowSummary),
+		zap.Bool("模板显示增长", tmpl.ShowGrowth),
+		zap.Bool("模板显示错误率", tmpl.ShowError),
+		zap.Bool("模板显示慢接口", tmpl.ShowSlow),
+		zap.Bool("模板显示告警", tmpl.ShowAlert))
+
 	if !canSendEmail() {
+		logger.Warn("年报邮件未发送: 邮件发送功能未启用或配置不完整")
 		return nil
 	}
 
+	logger.Debug("邮件配置检查通过，开始生成年报")
 	report, err := GenerateYearReportWithTemplate(email.GetDeviceName(), consecutiveFailN, topSlowN, tmpl)
 	if err != nil {
 		logger.Error("生成年报失败", zap.Error(err))
 		return err
 	}
 
+	logger.Debug("年报生成完成",
+		zap.String("周期", report.StartDate+" ~ "+report.EndDate),
+		zap.Int("日汇总条数", len(report.DailyStats)),
+		zap.Int("慢接口条数", len(report.SlowCases)),
+		zap.Int("告警条数", len(report.AlertCases)))
+
 	subject := fmt.Sprintf("【测试年报】pipetGo - %s (%s ~ %s)", email.GetDeviceName(), report.StartDate, report.EndDate)
 	body := report.FormatYearReport()
 
-	// 调试日志：报告已生成，记录类型与关键阈值；body_len 可用于判断内容是否为空
-	logger.Debug("生成报告完成", zap.String("类型", "年报"), zap.Int("连续失败阈值", consecutiveFailN), zap.Int("慢接口上限", topSlowN), zap.Int("正文长度", len(body)))
+	logger.Debug("年报格式化完成", zap.String("类型", "年报"), zap.Int("正文长度", len(body)))
 	logger.Info("开始发送年报邮件",
-		zap.String("subject", subject))
+		zap.String("主题", subject))
 	err = email.SendEmail(subject, body)
 	if err != nil {
 		logger.Error("发送年报邮件失败", zap.Error(err))
+	} else {
+		logger.Info("年报邮件发送成功", zap.String("主题", subject))
 	}
 	return err
 }
@@ -382,14 +466,14 @@ func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFai
 	}
 
 	logger.Info("准备发送测试报告邮件",
-		zap.Int("result_count", len(results)),
-		zap.Int("consecutive_fail_n", consecutiveFailN),
-		zap.Int("top_slow_n", topSlowN))
+		zap.Int("结果数", len(results)),
+		zap.Int("连续失败阈值", consecutiveFailN),
+		zap.Int("慢接口上限", topSlowN))
 
 	alerts, err := storage.GetConsecutiveFailures(consecutiveFailN)
 	if err != nil {
 		logger.Warn("获取连续失败告警失败，邮件报告可能缺少告警信息",
-			zap.Int("consecutive_fail_n", consecutiveFailN),
+			zap.Int("连续失败阈值", consecutiveFailN),
 			zap.Error(err))
 	}
 	alertIDs := make(map[string]bool)
@@ -481,10 +565,10 @@ func SendTestReportEmailWithAlerts(results []testcase.TestResult, consecutiveFai
 	body.WriteString("来自 pipetGo 测试程序")
 
 	logger.Info("开始发送测试报告邮件",
-		zap.String("subject", subject),
-		zap.Int("total", totalPassed+totalFailed+totalSkipped),
-		zap.Int("passed", totalPassed),
-		zap.Int("failed", totalFailed),
-		zap.Float64("pass_rate", passRate))
+		zap.String("主题", subject),
+		zap.Int("总数", totalPassed+totalFailed+totalSkipped),
+		zap.Int("通过", totalPassed),
+		zap.Int("失败", totalFailed),
+		zap.Float64("通过率", passRate))
 	return email.SendEmail(subject, body.String())
 }

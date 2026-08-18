@@ -25,25 +25,35 @@ func GenerateASCIIReportWithTemplate(deviceName string, consecutiveFailN int, to
 	fromDate := now.AddDate(0, 0, -30).Format("2006-01-02")
 	toDate := now.Format("2006-01-02")
 
+	logger.Debug("生成 ASCII 报告",
+		zap.String("起始日期", fromDate),
+		zap.String("结束日期", toDate),
+		zap.String("设备名", deviceName),
+		zap.Int("连续失败阈值", consecutiveFailN),
+		zap.Int("慢接口上限", topSlowN))
+
 	stats, err := storage.GetDailySummaries(fromDate, toDate)
 	if err != nil {
 		logger.Warn("获取每日汇总失败，报告可能缺少历史数据",
-			zap.String("from", fromDate),
-			zap.String("to", toDate),
+			zap.String("起始日期", fromDate),
+			zap.String("结束日期", toDate),
 			zap.Error(err))
 	}
+	logger.Debug("ASCII 报告日汇总查询结果", zap.Int("条数", len(stats)))
 
 	if len(stats) == 0 {
+		logger.Debug("无日汇总数据，回退到实时计算")
 		for d := fromDate; d <= toDate; d = nextDay(d) {
 			liveSummary, err := storage.GetDailySummaryFromExecutions(d)
 			if err != nil {
 				logger.Warn("从执行记录实时计算日汇总失败",
-					zap.String("date", d),
+					zap.String("日期", d),
 					zap.Error(err))
 			} else if liveSummary != nil {
 				stats = append(stats, *liveSummary)
 			}
 		}
+		logger.Debug("实时计算完成", zap.Int("条数", len(stats)))
 	}
 
 	slowCases, err := storage.GetCaseAverageDurations("desc")
@@ -51,6 +61,15 @@ func GenerateASCIIReportWithTemplate(deviceName string, consecutiveFailN int, to
 		logger.Warn("获取慢接口排行失败，报告将不包含慢接口数据", zap.Error(err))
 		slowCases = nil
 	} else if len(slowCases) == 0 {
+		logger.Debug("无慢接口数据")
+		if topSlowN <= 0 {
+			topSlowN = 10
+		}
+		if len(slowCases) > topSlowN {
+			slowCases = slowCases[:topSlowN]
+		}
+	} else {
+		logger.Debug("慢接口数据", zap.Int("条数", len(slowCases)))
 		if topSlowN <= 0 {
 			topSlowN = 10
 		}
@@ -64,14 +83,19 @@ func GenerateASCIIReportWithTemplate(deviceName string, consecutiveFailN int, to
 		alerts, err := storage.GetConsecutiveFailures(consecutiveFailN)
 		if err != nil {
 			logger.Warn("获取连续失败告警失败，报告将不包含告警信息",
-				zap.Int("consecutive_fail_n", consecutiveFailN),
+				zap.Int("连续失败阈值", consecutiveFailN),
 				zap.Error(err))
 		} else if len(alerts) > 0 {
 			alertCases = alerts
+			logger.Debug("连续失败告警", zap.Int("条数", len(alerts)))
+		} else {
+			logger.Debug("无连续失败告警")
 		}
 	}
 
-	return formatReportText(tmpl, fromDate, toDate, deviceName, stats, nil, slowCases, alertCases)
+	result := formatReportText(tmpl, fromDate, toDate, deviceName, stats, nil, slowCases, alertCases)
+	logger.Debug("ASCII 报告生成完成", zap.Int("输出字节数", len(result)))
+	return result
 }
 
 // GetCaseDurationList 获取所有用例耗时列表（按耗时降序）

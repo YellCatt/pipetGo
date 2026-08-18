@@ -138,13 +138,13 @@ func Init(ctx context.Context) {
 		}
 
 		logger.Info("配置已热更新",
-			zap.String("log_level", newCfg.Log.Level),
-			zap.Bool("email_enabled", newCfg.Email.Enabled),
-			zap.String("base_url", newCfg.Target.BaseURL),
+			zap.String("日志级别", newCfg.Log.Level),
+			zap.Bool("邮件启用", newCfg.Email.Enabled),
+			zap.String("基础URL", newCfg.Target.BaseURL),
 		)
 	})
 
-	logger.Debug("Init 执行完成")
+	logger.Debug("初始化执行完成")
 }
 
 func maskVars(vars map[string]string) map[string]string {
@@ -267,11 +267,11 @@ func RunSendReports(ctx context.Context, opts Options) {
 }
 
 func RunTests(ctx context.Context, paths []string, opts Options) {
-	logger.Debug("RunTests 被调用", zap.Strings("路径", paths))
+	logger.Debug("测试执行入口被调用", zap.Strings("路径", paths))
 	_ = ExecuteTestCycle(ctx, paths, opts)
-	logger.Debug("ExecuteTestCycle 执行完成")
+	logger.Debug("测试周期执行完成")
 	waitForScheduler(ctx)
-	logger.Debug("waitForScheduler 返回")
+	logger.Debug("等待调度器已返回")
 }
 
 func waitForScheduler(ctx context.Context) {
@@ -284,11 +284,11 @@ func waitForScheduler(ctx context.Context) {
 }
 
 func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testcase.TestResult {
-	logger.Debug("ExecuteTestCycle 开始执行")
+	logger.Debug("测试周期开始执行")
 	cfg := config.GetConfig()
 	logger.Debug("获取配置完成",
-		zap.String("test_case_dir", fmt.Sprint(cfg.Test.TestCaseDir)),
-		zap.String("data_dir", cfg.Test.DataDir))
+		zap.String("测试用例目录", fmt.Sprint(cfg.Test.TestCaseDir)),
+		zap.String("数据目录", cfg.Test.DataDir))
 
 	fmt.Print(reporting.StartupBanner(cfg.Test.DeviceName, cfg.Log.Output))
 
@@ -342,7 +342,7 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 	logger.Debug("标签过滤后剩余", zap.Int("数量", len(testCases)))
 
 	if len(testCases) == 0 {
-		logger.Debug("没有需要执行的测试用例，ExecuteTestCycle 返回")
+		logger.Debug("没有需要执行的测试用例，测试周期返回")
 		logger.Info("没有需要执行的测试用例")
 		return nil
 	}
@@ -390,14 +390,17 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 		fmt.Printf("║ 执行全局前置条件                                       ║\n")
 		fmt.Printf("╚════════════════════════════════════════════════════════╝\n\n")
 
+		logger.Debug("开始执行全局前置条件", zap.Strings("ID列表", cfg.Test.GlobalPre))
 		for _, preID := range cfg.Test.GlobalPre {
 			found := false
 			for _, tc := range testCases {
 				if tc.ID == preID {
 					fmt.Printf("[全局前置] 执行: %s - %s\n", tc.ID, tc.Desc)
+					logger.Debug("执行全局前置条件", zap.String("ID", tc.ID), zap.String("描述", tc.Desc))
 					result := testcase.ExecuteTestCaseWithContext(ctx, tc)
 					if !result.Passed {
 						fmt.Printf("[全局前置] ❌ 失败: %s\n", result.Error)
+						logger.Error("全局前置条件失败", zap.String("ID", tc.ID), zap.String("错误", result.Error))
 						fmt.Printf("\n全局前置条件失败，终止测试执行\n")
 						errorMsg := fmt.Sprintf("全局前置条件 '%s' 执行失败: %s", tc.ID, result.Error)
 						if err := reporting.SendErrorReportEmail(errorMsg); err != nil {
@@ -405,6 +408,7 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 						}
 						os.Exit(1)
 					}
+					logger.Debug("全局前置条件通过", zap.String("ID", tc.ID))
 					return nil
 				}
 				fmt.Printf("[全局前置] ✅ 成功\n")
@@ -413,6 +417,7 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 			}
 			if !found {
 				fmt.Printf("[全局前置] ⚠️ 未找到测试用例: %s\n", preID)
+				logger.Warn("全局前置条件未找到用例", zap.String("ID", preID))
 			}
 		}
 		fmt.Println()
@@ -536,7 +541,7 @@ func ExecuteTestCycle(ctx context.Context, paths []string, opts Options) []testc
 	alerts, err := storage.GetConsecutiveFailures(consecutiveFailN)
 	if err != nil {
 		logger.Warn("获取连续失败告警失败，报告将不包含告警信息",
-			zap.Int("consecutive_fail_n", consecutiveFailN),
+			zap.Int("连续失败阈值", consecutiveFailN),
 			zap.Error(err))
 	} else if len(alerts) > 0 {
 		fmt.Printf("\n════════════════════════════════════════════════════════╗\n")
@@ -563,11 +568,13 @@ func calculateEstimatedDuration(testCases []psv.TestCase) time.Duration {
 	}
 
 	if len(averages) == 0 {
+		logger.Debug("无历史平均耗时数据，预估时长为 0")
 		return 0
 	}
 
 	var total time.Duration
 	unknownCount := 0
+	knownCount := 0
 
 	for _, tc := range testCases {
 		if tc.Skip {
@@ -577,6 +584,7 @@ func calculateEstimatedDuration(testCases []psv.TestCase) time.Duration {
 		url := vars.Replace(tc.URL)
 		if avg, ok := averages[url]; ok {
 			total += avg
+			knownCount++
 		} else {
 			unknownCount++
 		}
@@ -589,6 +597,14 @@ func calculateEstimatedDuration(testCases []psv.TestCase) time.Duration {
 		}
 		avgAll /= time.Duration(len(averages))
 		total += avgAll * time.Duration(unknownCount)
+		logger.Debug("预估耗时: 用历史均值估算未知用例",
+			zap.Int("已知用例", knownCount),
+			zap.Int("未知用例", unknownCount),
+			zap.Duration("历史均值", avgAll))
+	} else {
+		logger.Debug("预估耗时: 所有用例均有历史数据",
+			zap.Int("已知用例", knownCount),
+			zap.Int("未知用例", unknownCount))
 	}
 
 	return total
@@ -696,11 +712,11 @@ func correctAndRecordResults(results []testcase.TestResult, totalDuration time.D
 		overheadPerTest = overhead / time.Duration(passedCount)
 
 		logger.Info("正在修正执行时间",
-			zap.Duration("total_duration", totalDuration),
-			zap.Duration("actual_sum", actualSum),
-			zap.Duration("overhead", overhead),
-			zap.Int("passed_count", passedCount),
-			zap.Duration("overhead_per_test", overheadPerTest))
+			zap.Duration("总耗时", totalDuration),
+			zap.Duration("实际耗时总和", actualSum),
+			zap.Duration("开销", overhead),
+			zap.Int("通过用例数", passedCount),
+			zap.Duration("每用例开销", overheadPerTest))
 	}
 
 	for _, result := range results {
@@ -723,9 +739,9 @@ func correctAndRecordResults(results []testcase.TestResult, totalDuration time.D
 		)
 
 		logger.Info("已记录执行结果",
-			zap.String("test_case_id", result.TestCase.ID),
-			zap.Bool("passed", result.Passed),
-			zap.Duration("duration", duration))
+			zap.String("用例ID", result.TestCase.ID),
+			zap.Bool("是否通过", result.Passed),
+			zap.Duration("耗时", duration))
 	}
 }
 

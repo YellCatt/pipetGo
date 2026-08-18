@@ -103,9 +103,9 @@ func initCSVInternal(dir string) error {
 	}
 
 	logger.Info("CSV 存储初始化成功",
-		zap.String("executionCSV", executionCSVPath()),
-		zap.String("averageCSV", averageCSVPath()),
-		zap.String("dailyCSV", dailyCSVPath()))
+		zap.String("执行记录表", executionCSVPath()),
+		zap.String("平均时间表", averageCSVPath()),
+		zap.String("每日汇总表", dailyCSVPath()))
 	return nil
 }
 
@@ -456,11 +456,11 @@ func CalculateAndStoreAverages() error {
 			now,
 		})
 		logger.Info("已存储平均耗时",
-			zap.String("test_case_id", g.testCaseID),
-			zap.String("file_name", g.fileName),
-			zap.String("url", g.url),
-			zap.Float64("avg_ms", avg),
-			zap.Int64("count", g.count))
+			zap.String("用例ID", g.testCaseID),
+			zap.String("文件名", g.fileName),
+			zap.String("URL", g.url),
+			zap.Float64("平均耗时ms", avg),
+			zap.Int64("次数", g.count))
 	}
 
 	if err := writeRecords(averageCSVPath(), averageHeader, avgRecords); err != nil {
@@ -551,6 +551,16 @@ func RecordDailySummary(date string, total, passed, failed, skipped int, totalDu
 		strconv.Itoa(uniqueCases),
 	}
 
+	logger.Debug("记录每日汇总",
+		zap.String("日期", date),
+		zap.Int("总数", total),
+		zap.Int("通过", passed),
+		zap.Int("失败", failed),
+		zap.Int("跳过", skipped),
+		zap.Float64("错误率", errorRate),
+		zap.Duration("总耗时", totalDuration),
+		zap.Int("独立用例数", uniqueCases))
+
 	return appendRecord(dailyCSVPath(), record)
 }
 
@@ -612,6 +622,7 @@ func GetDailySummaryFromExecutions(date string) (*DailySummary, error) {
 	}
 
 	if total == 0 {
+		logger.Debug("实时日汇总: 无数据", zap.String("日期", date))
 		return nil, nil
 	}
 
@@ -630,6 +641,15 @@ func GetDailySummaryFromExecutions(date string) (*DailySummary, error) {
 		TotalDurationMs: totalDurationMs,
 		UniqueCases:     len(uniqueCases),
 	}
+
+	logger.Debug("实时日汇总计算完成",
+		zap.String("日期", date),
+		zap.Int("总数", total),
+		zap.Int("通过", passed),
+		zap.Int("失败", failed),
+		zap.Float64("错误率", errorRate),
+		zap.Int64("耗时ms", totalDurationMs),
+		zap.Int("独立用例", len(uniqueCases)))
 	return summary, nil
 }
 

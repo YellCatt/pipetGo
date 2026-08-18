@@ -146,34 +146,58 @@ func InitConfig() {
 	// 如果指定了配置文件路径，使用指定的文件
 	if CfgFile != "" {
 		viper.SetConfigFile(CfgFile)
+		logger.Debug("使用指定配置文件", zap.String("路径", CfgFile))
 	} else {
 		// 默认从 ./config/config.yaml 读取配置
 		viper.AddConfigPath("./config")
 		viper.SetConfigName("config")
 		viper.SetConfigType("yaml")
+		logger.Debug("使用默认配置路径 ./config/config.yaml")
 	}
 
 	// 读取配置文件
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("读取配置文件失败: %v", err)
 	}
+	logger.Debug("配置文件读取成功")
 
 	// 将配置解析到结构体（vars 字段会被 viper 转换为小写，后续会修复）
 	if err := viper.Unmarshal(&AppConfig); err != nil {
 		log.Fatalf("解析配置到结构体失败: %v", err)
 	}
+	logger.Debug("配置解析成功",
+		zap.String("基础URL", AppConfig.Target.BaseURL),
+		zap.Int("超时", AppConfig.Target.Timeout),
+		zap.String("日志级别", AppConfig.Log.Level),
+		zap.String("日志输出", AppConfig.Log.Output),
+		zap.Int("轮数", AppConfig.Test.Rounds),
+		zap.Int("间隔ms", AppConfig.Test.IntervalMs))
 
-	// 设置 cleaner 的默认配置
+	// 设置清理器的默认配置
 	applyCleanerDefaults(&AppConfig)
+	logger.Debug("清理器默认值已应用",
+		zap.Bool("启用", AppConfig.Cleaner.Enabled),
+		zap.Int("保留天数", AppConfig.Cleaner.RetentionDays),
+		zap.Int("间隔小时", AppConfig.Cleaner.IntervalHours))
 
-	// 设置 reporting 的默认配置
+	// 设置报告的默认配置
 	applyReportingDefaults(&AppConfig)
+	logger.Debug("报告默认值已应用",
+		zap.String("发送时间", AppConfig.Reporting.SendTime),
+		zap.Bool("日报", AppConfig.Reporting.DailyEnabled),
+		zap.Bool("周报", AppConfig.Reporting.WeeklyEnabled),
+		zap.Bool("月报", AppConfig.Reporting.MonthlyEnabled),
+		zap.Bool("年报", AppConfig.Reporting.YearlyEnabled),
+		zap.Int("连续失败阈值", AppConfig.Reporting.ConsecutiveFailN),
+		zap.Int("慢接口上限", AppConfig.Reporting.TopSlowN))
 
 	// 单独读取 vars 配置，保留原始键名（避免 viper 自动转换小写）
 	AppConfig.Vars = loadRawVars()
+	logger.Debug("自定义变量已加载", zap.Int("数量", len(AppConfig.Vars)))
 
 	// 启动配置文件监听（热加载）
 	go watchConfig()
+	logger.Debug("配置文件热加载监听已启动")
 }
 
 // applyCleanerDefaults 设置 cleaner 配置的默认值
@@ -264,8 +288,8 @@ func watchConfig() {
 	viper.WatchConfig()
 	viper.OnConfigChange(func(e fsnotify.Event) {
 		logger.Info("检测到配置文件变化",
-			zap.String("file", e.Name),
-			zap.String("op", e.Op.String()))
+			zap.String("文件", e.Name),
+			zap.String("操作", e.Op.String()))
 
 		// 重新解析配置到临时结构体
 		var newCfg Config
@@ -327,6 +351,7 @@ func loadRawVars() map[string]string {
 						result[k] = fmt.Sprintf("%v", val)
 					}
 				}
+				logger.Debug("从 YAML 直接解析变量成功", zap.Int("数量", len(result)))
 				return result
 			}
 		}
@@ -336,5 +361,6 @@ func loadRawVars() map[string]string {
 	for k, v := range viper.GetStringMapString("vars") {
 		result[k] = v
 	}
+	logger.Debug("回退到 viper 解析变量", zap.Int("数量", len(result)))
 	return result
 }

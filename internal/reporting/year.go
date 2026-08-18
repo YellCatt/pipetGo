@@ -26,22 +26,42 @@ func GenerateYearReport(deviceName string, consecutiveFailN int, topSlowN int) (
 	startDate := now.Format("2006") + "-01-01"
 	endDate := now.Format("2006-01-02")
 
+	logger.Debug("开始生成年报",
+		zap.String("起始日期", startDate),
+		zap.String("结束日期", endDate),
+		zap.String("设备名", deviceName),
+		zap.Int("连续失败阈值", consecutiveFailN),
+		zap.Int("慢接口上限", topSlowN))
+
 	stats, err := storage.GetDailySummaries(startDate, endDate)
 	if err != nil {
+		logger.Error("获取年度日汇总失败", zap.Error(err))
 		return nil, err
 	}
 
+	logger.Debug("年报日汇总查询结果",
+		zap.Int("汇总条数", len(stats)))
+
 	if len(stats) == 0 {
+		logger.Debug("年报无日汇总数据，尝试从执行记录实时计算",
+			zap.String("起始日期", startDate),
+			zap.String("结束日期", endDate))
 		for d := startDate; d <= endDate; d = nextDay(d) {
 			liveSummary, err := storage.GetDailySummaryFromExecutions(d)
 			if err != nil {
 				logger.Warn("从执行记录实时计算日汇总失败",
-					zap.String("date", d),
+					zap.String("日期", d),
 					zap.Error(err))
 			} else if liveSummary != nil {
+				logger.Debug("实时计算日汇总成功",
+					zap.String("日期", d),
+					zap.Int("总数", liveSummary.Total),
+					zap.Int("通过", liveSummary.Passed),
+					zap.Int("失败", liveSummary.Failed))
 				stats = append(stats, *liveSummary)
 			}
 		}
+		logger.Debug("年报实时计算完成", zap.Int("汇总条数", len(stats)))
 	}
 
 	slowCases, err := storage.GetCaseAverageDurations("desc")
@@ -55,12 +75,20 @@ func GenerateYearReport(deviceName string, consecutiveFailN int, topSlowN int) (
 	if len(slowCases) > topSlowN {
 		slowCases = slowCases[:topSlowN]
 	}
+	logger.Debug("年报慢接口数据", zap.Int("条数", len(slowCases)))
 
 	alertCases, err := storage.GetConsecutiveFailures(consecutiveFailN)
 	if err != nil {
 		logger.Warn("获取连续失败告警失败，年报将不包含告警信息", zap.Error(err))
 		alertCases = nil
 	}
+	logger.Debug("年报告警数据", zap.Int("条数", len(alertCases)))
+
+	logger.Info("年报数据汇总",
+		zap.String("周期", startDate+" ~ "+endDate),
+		zap.Int("日汇总条数", len(stats)),
+		zap.Int("慢接口条数", len(slowCases)),
+		zap.Int("告警条数", len(alertCases)))
 
 	return &YearReport{
 		StartDate:  startDate,

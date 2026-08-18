@@ -14,6 +14,7 @@ import (
 
 func BodyRegexMatch(body string, pattern string) (bool, string) {
 	if pattern == "" {
+		logger.Debug("响应体正则匹配: 空模式，跳过")
 		return true, ""
 	}
 
@@ -25,11 +26,15 @@ func BodyRegexMatch(body string, pattern string) (bool, string) {
 
 	matched, err := regexp.MatchString(pattern, body)
 	if err != nil {
+		logger.Debug("响应体正则匹配: 正则匹配出错", zap.String("模式", pattern), zap.Error(err))
 		return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 	}
 
 	if negate {
 		matched = !matched
+		logger.Debug("响应体正则匹配: 取反模式", zap.String("模式", pattern), zap.Bool("结果", matched))
+	} else {
+		logger.Debug("响应体正则匹配: 正向模式", zap.String("模式", pattern), zap.Bool("结果", matched))
 	}
 
 	if !matched {
@@ -44,11 +49,18 @@ func BodyRegexMatch(body string, pattern string) (bool, string) {
 
 func JSONMatch(expected, actual string, matchMode string) (bool, string) {
 	if expected == "" {
+		logger.Debug("JSON 匹配: 期望值为空，跳过")
 		return true, ""
 	}
 
 	expectedData := gjson.Parse(expected)
 	actualData := gjson.Parse(actual)
+
+	logger.Debug("JSON 匹配",
+		zap.String("模式", matchMode),
+		zap.String("期望值", truncateForLog(expected)),
+		zap.Bool("期望是对象", expectedData.IsObject()),
+		zap.Int("期望字段数", len(expectedData.Map())))
 
 	if matchMode == "subset" {
 		return jsonSubsetMatch(expectedData, actualData)
@@ -128,14 +140,14 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 			pattern = fixRegexEscapes(pattern)
 			pattern, err := validateRegexPattern(pattern)
 			if err != nil {
-				return false, fmt.Sprintf("invalid regex: %s", err.Error())
+				return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 			}
 			matched, err := regexp.MatchString(pattern, actual.String())
 			if err != nil {
-				return false, fmt.Sprintf("invalid regex: %s", err.Error())
+				return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 			}
 			if !matched {
-				return false, fmt.Sprintf("value '%s' does not match regex '%s'", actual.String(), pattern)
+				return false, fmt.Sprintf("值 '%s' 不匹配正则 '%s'", actual.String(), pattern)
 			}
 			return true, ""
 		}
@@ -145,14 +157,14 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 			pattern = fixRegexEscapes(pattern)
 			pattern, err := validateRegexPattern(pattern)
 			if err != nil {
-				return false, fmt.Sprintf("invalid regex: %s", err.Error())
+				return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 			}
 			matched, err := regexp.MatchString(pattern, actual.String())
 			if err != nil {
-				return false, fmt.Sprintf("invalid regex: %s", err.Error())
+				return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 			}
 			if matched {
-				return false, fmt.Sprintf("value '%s' should NOT match regex '%s'", actual.String(), pattern)
+				return false, fmt.Sprintf("值 '%s' 不应匹配正则 '%s'", actual.String(), pattern)
 			}
 			return true, ""
 		}
@@ -168,14 +180,14 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 		pattern = fixRegexEscapes(pattern)
 		pattern, err := validateRegexPattern(pattern)
 		if err != nil {
-			return false, fmt.Sprintf("invalid regex: %s", err.Error())
+			return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 		}
 		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
-			return false, fmt.Sprintf("invalid regex: %s", err.Error())
+			return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 		}
 		if !matched {
-			return false, fmt.Sprintf("value '%s' does not match regex '%s'", actual.String(), pattern)
+			return false, fmt.Sprintf("值 '%s' 不匹配正则 '%s'", actual.String(), pattern)
 		}
 		return true, ""
 	}
@@ -185,14 +197,14 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 		pattern = fixRegexEscapes(pattern)
 		pattern, err := validateRegexPattern(pattern)
 		if err != nil {
-			return false, fmt.Sprintf("invalid regex: %s", err.Error())
+			return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 		}
 		matched, err := regexp.MatchString(pattern, actual.String())
 		if err != nil {
-			return false, fmt.Sprintf("invalid regex: %s", err.Error())
+			return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 		}
 		if matched {
-			return false, fmt.Sprintf("value '%s' should NOT match regex '%s'", actual.String(), pattern)
+			return false, fmt.Sprintf("值 '%s' 不应匹配正则 '%s'", actual.String(), pattern)
 		}
 		return true, ""
 	}
@@ -210,11 +222,23 @@ func compareValues(expected, actual gjson.Result) (bool, string) {
 }
 
 func StreamAssert(aggregatedContent string, chunkCount int, asserts []StreamAssertConfig) (bool, string) {
-	for _, sa := range asserts {
+	logger.Debug("流式断言开始",
+		zap.Int("块数", chunkCount),
+		zap.Int("断言数", len(asserts)))
+
+	for i, sa := range asserts {
+		logger.Debug("执行流式断言",
+			zap.Int("索引", i),
+			zap.String("类型", sa.Kind),
+			zap.String("模式", sa.Pattern),
+			zap.Int("最小块数", sa.MinChunks))
+
 		if ok, _ := checkStreamAssert(aggregatedContent, chunkCount, sa); ok {
+			logger.Debug("流式断言通过", zap.Int("索引", i))
 			return true, ""
 		}
 	}
+	logger.Debug("所有流式断言均未通过")
 	return false, "无可匹配的流式断言"
 }
 
@@ -240,7 +264,7 @@ func checkStreamAssert(aggregatedContent string, chunkCount int, sa StreamAssert
 	case "regex":
 		matched, err := regexp.MatchString(sa.Pattern, aggregatedContent)
 		if err != nil {
-			return false, fmt.Sprintf("invalid regex: %s", err.Error())
+			return false, fmt.Sprintf("无效的正则表达式: %s", err.Error())
 		}
 		if matched {
 			return true, ""
@@ -272,7 +296,7 @@ func ExtractVariables(responseBody string, extractExpr string) (map[string]strin
 	for _, part := range parts {
 		kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
 		if len(kv) != 2 {
-			logger.Warn("extract 表达式格式错误，跳过", zap.String("片段", part))
+			logger.Warn("变量提取表达式格式错误，跳过", zap.String("片段", part))
 			continue
 		}
 
@@ -300,6 +324,14 @@ func maskValue(s string) string {
 		return s
 	}
 	return s[:6] + "***" + s[len(s)-6:]
+}
+
+// truncateForLog 截断长字符串用于日志输出
+func truncateForLog(s string) string {
+	if len(s) <= 200 {
+		return s
+	}
+	return s[:100] + "...(截断，共 " + fmt.Sprint(len(s)) + " 字符)"
 }
 
 func BuildAggregatedResult(aggregatedContent string, chunkCount int) string {

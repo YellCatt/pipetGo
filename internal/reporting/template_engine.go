@@ -301,15 +301,19 @@ func BuildReportData(tmpl ReportTemplate, startDate, endDate, deviceName string,
 func RenderTextReport(tmplName string, data any) (string, error) {
 	var buf bytes.Buffer
 	if err := textTmpl.ExecuteTemplate(&buf, tmplName, data); err != nil {
+		logger.Error("渲染文本模板失败", zap.String("模板名", tmplName), zap.Error(err))
 		return "", fmt.Errorf("渲染文本模板 %s 失败: %w", tmplName, err)
 	}
-	return buf.String(), nil
+	result := buf.String()
+	logger.Debug("文本模板渲染成功", zap.String("模板名", tmplName), zap.Int("输出字节数", len(result)))
+	return result, nil
 }
 
 // MustRenderText 渲染文本模板，失败时返回错误信息字符串
 func MustRenderText(tmplName string, data any) string {
 	result, err := RenderTextReport(tmplName, data)
 	if err != nil {
+		logger.Error("渲染文本模板失败", zap.String("模板名", tmplName), zap.Error(err))
 		return fmt.Sprintf("模板渲染错误: %v", err)
 	}
 	return result
