@@ -44,21 +44,26 @@ func InitLogger(cfg LogConfig) {
 		zap.String("编码", cfg.Encoding),
 		zap.String("输出", cfg.Output))
 
-	var encoder zapcore.Encoder
 	var encoderCfg zapcore.EncoderConfig
 
 	switch cfg.Encoding {
 	case "console":
 		encoderCfg = zap.NewDevelopmentEncoderConfig()
-		encoder = zapcore.NewConsoleEncoder(encoderCfg)
 	default:
 		encoderCfg = zap.NewProductionEncoderConfig()
-		encoder = zapcore.NewJSONEncoder(encoderCfg)
 	}
 
 	encoderCfg.TimeKey = "time"
 	encoderCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 		enc.AppendString(timeutil.FormatDateTimeMs(t))
+	}
+
+	var encoder zapcore.Encoder
+	switch cfg.Encoding {
+	case "console":
+		encoder = zapcore.NewConsoleEncoder(encoderCfg)
+	default:
+		encoder = zapcore.NewJSONEncoder(encoderCfg)
 	}
 
 	var core zapcore.Core
