@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"pipetGo/internal/logger"
 	"pipetGo/internal/reporting"
 	"pipetGo/internal/timeutil"
@@ -105,7 +107,7 @@ func Start(ctx context.Context, dataDir string, cfg Config, runner TestRunner) {
 					logger.Debug("报告调度器心跳",
 						zap.String("当前时间", now.Format("2006-01-02 15:04:05")),
 						zap.Int("目标发送时间", sendHour*60+sendMinute),
-						zap.Int("当前分钟", now.Hour()*60+now.Minute))
+						zap.Int("当前分钟", now.Hour()*60+now.Minute()))
 					checkAndSendReports(dataDir, cfg, sendHour, sendMinute)
 				case <-ctx.Done():
 					logger.Info("报告调度器已停止")

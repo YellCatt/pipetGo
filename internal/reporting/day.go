@@ -56,9 +56,9 @@ func GenerateDayReport(deviceName string, consecutiveFailN int, topSlowN int) (*
 			stats = append(stats, *liveSummary)
 			logger.Debug("实时计算当日汇总成功",
 				zap.String("日期", dateStr),
-				zap.Int("执行次数", liveSummary.TotalExecutions),
-				zap.Int("通过数", liveSummary.PassedCount),
-				zap.Int("失败数", liveSummary.FailedCount))
+				zap.Int("执行次数", liveSummary.Total),
+				zap.Int("通过数", liveSummary.Passed),
+				zap.Int("失败数", liveSummary.Failed))
 		} else {
 			logger.Debug("实时计算当日汇总结果为空",
 				zap.String("日期", dateStr))

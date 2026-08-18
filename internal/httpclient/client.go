@@ -76,7 +76,7 @@ func NewRequestWithContext(ctx context.Context) *resty.Request {
 		zap.String("请求方法", req.Method),
 		zap.String("请求URL", req.URL),
 		zap.Int("请求头数", len(req.Header)),
-		zap.Int("查询参数数", len(req.QueryParam))))
+		zap.Int("查询参数数", len(req.QueryParam)))
 	return req
 }
 

@@ -114,15 +114,7 @@ func expandPath(path string) ([]string, error) {
 		logger.Debug("路径不存在，尝试通配符匹配", zap.String("路径", path), zap.Error(err))
 	}
 
-	files, err := filepath.Glob(path)
-	if err != nil {
-		return nil, err
-	}
-	logger.Debug("通配符匹配结果", zap.String("路径", path), zap.Int("匹配数", len(files)))
-		return files, nil
-	}
-
-	if info.IsDir() {
+	if info != nil && info.IsDir() {
 		logger.Debug("扫描目录中的 PSV/CSV 文件", zap.String("目录", path))
 		matches, err := doublestar.Glob(os.DirFS(path), "**/*.{psv,csv}")
 		if err != nil {
@@ -135,8 +127,13 @@ func expandPath(path string) ([]string, error) {
 		logger.Debug("目录扫描完成", zap.String("目录", path), zap.Int("找到文件数", len(files)))
 		return files, nil
 	}
-	logger.Debug("解析单个文件", zap.String("路径", path))
-	return []string{path}, nil
+
+	files, err := filepath.Glob(path)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debug("通配符匹配结果", zap.String("路径", path), zap.Int("匹配数", len(files)))
+	return files, nil
 }
 
 // parseReader 从读取器解析PSV内容
@@ -283,6 +280,7 @@ func parseTestCase(header []string, fields []string) (TestCase, error) {
 				if err := json.Unmarshal([]byte(value), &tc.StreamAssert); err != nil {
 					logger.Warn("解析流式断言字段失败", zap.String("原始值", value), zap.Error(err))
 				}
+			}
 		case "match_mode":
 			tc.MatchMode = value
 		case "body_regex":
