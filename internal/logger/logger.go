@@ -39,7 +39,7 @@ type LogConfig struct {
 func InitLogger(cfg LogConfig) {
 	logLevel = zap.NewAtomicLevelAt(getLogLevel(cfg.Level))
 
-	logger.Debug("初始化日志系统",
+	Debug("初始化日志系统",
 		zap.String("级别", cfg.Level),
 		zap.String("编码", cfg.Encoding),
 		zap.String("输出", cfg.Output))
@@ -70,7 +70,7 @@ func InitLogger(cfg LogConfig) {
 
 	if cfg.Output == "stdout" || cfg.Output == "" {
 		core = zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), logLevel)
-		logger.Info("日志输出到 stdout")
+		Info("日志输出到 stdout")
 	} else {
 		writer, err := newRotateWriter(cfg.Output, defaultMaxSize)
 		if err != nil {
@@ -78,14 +78,14 @@ func InitLogger(cfg LogConfig) {
 			os.Exit(1)
 		}
 		core = zapcore.NewCore(encoder, writer, logLevel)
-		logger.Info("日志输出到文件",
+		Info("日志输出到文件",
 			zap.String("路径", cfg.Output),
 			zap.Int64("单文件上限MB", defaultMaxSize/(1024*1024)))
 	}
 
 	log = zap.New(core, zap.AddCaller())
 	zap.ReplaceGlobals(log)
-	logger.Info("日志系统初始化完成", zap.String("级别", cfg.Level))
+	Info("日志系统初始化完成", zap.String("级别", cfg.Level))
 }
 
 // rotateWriter 实现日期 + 文件大小双重滚动
