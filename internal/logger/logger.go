@@ -1,11 +1,16 @@
 // Package logger 提供日志记录功能
 // 使用 zap 日志库实现结构化日志，支持控制台和文件输出
+// 文件输出采用日期 + 文件大小双重滚动策略：
+//   - 按天区分日志，日期嵌入文件名（如 pipet_20260818_1.log）
+//   - 单个日志文件上限 20MB，达到阈值后自动切分为同日期下的多个分片文件
 package logger
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -19,6 +24,9 @@ import (
 var log *zap.Logger
 var logLevel zap.AtomicLevel
 
+// defaultMaxSize 默认单个日志文件上限：20MB
+const defaultMaxSize = 20 * 1024 * 1024
+
 // LogConfig 表示日志配置
 type LogConfig struct {
 	Level    string // 日志级别 (debug/info/warn/error)
@@ -29,52 +37,156 @@ type LogConfig struct {
 // InitLogger 初始化日志系统
 // cfg: 日志配置
 func InitLogger(cfg LogConfig) {
-	var zapConfig zap.Config
+	logLevel = zap.NewAtomicLevelAt(getLogLevel(cfg.Level))
 
-	// 根据编码格式选择配置
+	var encoder zapcore.Encoder
+	var encoderCfg zapcore.EncoderConfig
+
 	switch cfg.Encoding {
 	case "console":
-		zapConfig = zap.NewDevelopmentConfig()
+		encoderCfg = zap.NewDevelopmentEncoderConfig()
+		encoder = zapcore.NewConsoleEncoder(encoderCfg)
 	default:
-		zapConfig = zap.NewProductionConfig()
+		encoderCfg = zap.NewProductionEncoderConfig()
+		encoder = zapcore.NewJSONEncoder(encoderCfg)
 	}
 
-	// 设置日志级别
-	logLevel = zap.NewAtomicLevelAt(getLogLevel(cfg.Level))
-	zapConfig.Level = logLevel
-	zapConfig.Encoding = cfg.Encoding
-
-	// 设置输出路径
-	var outputPaths []string
-	if cfg.Output == "stdout" {
-		outputPaths = []string{"stdout"}
-	} else {
-		logPath := addTimestampToFilename(cfg.Output)
-		ensureDir(logPath)
-		outputPaths = []string{logPath}
-	}
-	zapConfig.OutputPaths = outputPaths
-
-	// 设置时间格式（东八区）
-	zapConfig.EncoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+	encoderCfg.TimeKey = "time"
+	encoderCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 		enc.AppendString(timeutil.FormatDateTimeMs(t))
 	}
 
-	// 构建日志实例
-	var err error
-	log, err = zapConfig.Build()
-	if err != nil {
-		zap.L().Fatal("初始化日志系统失败", zap.Error(err))
-		os.Exit(1)
+	var core zapcore.Core
+
+	if cfg.Output == "stdout" || cfg.Output == "" {
+		core = zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), logLevel)
+	} else {
+		writer, err := newRotateWriter(cfg.Output, defaultMaxSize)
+		if err != nil {
+			zap.L().Fatal("初始化日志滚动写入器失败", zap.Error(err))
+			os.Exit(1)
+		}
+		core = zapcore.NewCore(encoder, writer, logLevel)
 	}
 
-	// 设置全局日志实例
+	log = zap.New(core, zap.AddCaller())
 	zap.ReplaceGlobals(log)
 }
 
-// addTimestampToFilename 为日志文件名添加时间戳（东八区）
-// path: 原始文件路径
-// 返回: 添加时间戳后的文件路径
+// rotateWriter 实现日期 + 文件大小双重滚动
+type rotateWriter struct {
+	mu         sync.Mutex
+	basePath   string
+	maxSize    int64
+	currentDay string
+	currentIdx int
+	file       *os.File
+	fileSize   int64
+}
+
+// newRotateWriter 创建一个滚动写入器
+// basePath 例如 "./logs/pipet.log"
+// 实际输出: ./logs/pipet_20260818_1.log, pipet_20260818_2.log ...
+func newRotateWriter(basePath string, maxSize int64) (*rotateWriter, error) {
+	w := &rotateWriter{
+		basePath: basePath,
+		maxSize:  maxSize,
+	}
+	if err := w.rotate(timeutil.Now(), true); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
+// rotate 根据日期和大小滚动到目标文件
+// 由调用方持有锁
+func (w *rotateWriter) rotate(now time.Time, forceNewFile bool) error {
+	day := timeutil.Format(now, "20060102")
+
+	if w.file != nil {
+		_ = w.file.Close()
+		w.file = nil
+	}
+
+	if day == w.currentDay && !forceNewFile {
+		return nil
+	}
+
+	w.currentDay = day
+	w.currentIdx = 1
+	w.fileSize = 0
+	return w.openFile(1)
+}
+
+// openFile 打开指定分片序号的文件
+// 文件命名: {name}_{YYYYMMDD}_{idx}{ext}
+// 例如: pipet_20260818_1.log, pipet_20260818_2.log
+func (w *rotateWriter) openFile(idx int) error {
+	dir := filepath.Dir(w.basePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	filename := filepath.Base(w.basePath)
+	ext := filepath.Ext(filename)
+	nameWithoutExt := strings.TrimSuffix(filename, ext)
+
+	fullPath := filepath.Join(dir, fmt.Sprintf("%s_%s_%d%s", nameWithoutExt, w.currentDay, idx, ext))
+
+	f, err := os.OpenFile(fullPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return err
+	}
+
+	w.file = f
+	w.fileSize = info.Size()
+	w.currentIdx = idx
+	return nil
+}
+
+// Write 实现 io.Writer，根据日期/大小检测是否需要滚动
+func (w *rotateWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	now := timeutil.Now()
+	day := timeutil.Format(now, "20060102")
+
+	if day != w.currentDay {
+		if err := w.rotate(now, true); err != nil {
+			return 0, err
+		}
+	}
+
+	if w.fileSize+int64(len(p)) > w.maxSize {
+		nextIdx := w.currentIdx + 1
+		if err := w.openFile(nextIdx); err != nil {
+			return 0, err
+		}
+	}
+
+	n, err := w.file.Write(p)
+	w.fileSize += int64(n)
+	return n, err
+}
+
+// Sync 实现 zapcore.WriteSyncer
+func (w *rotateWriter) Sync() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file != nil {
+		return w.file.Sync()
+	}
+	return nil
+}
+
+// addTimestampToFilename 保留用于兼容
 func addTimestampToFilename(path string) string {
 	dir := filepath.Dir(path)
 	filename := filepath.Base(path)
@@ -82,11 +194,9 @@ func addTimestampToFilename(path string) string {
 	ext := filepath.Ext(filename)
 	nameWithoutExt := strings.TrimSuffix(filename, ext)
 
-	// 使用东八区时间
 	timestamp := timeutil.FormatCompact(timeutil.Now())
 
 	return filepath.Join(dir, nameWithoutExt+"_"+timestamp+ext)
-
 }
 
 // ensureDir 确保日志目录存在
